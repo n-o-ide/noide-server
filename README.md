@@ -31,10 +31,24 @@ Supported platforms:
 | Linux | x86_64, aarch64 | aarch64 targets Raspberry Pi / ARM servers |
 | macOS | x86_64 (Intel), aarch64 (Apple Silicon) | see [macOS note](#macos-note) |
 
+### Requirements
+
+- **No Rust needed.** `install.sh` downloads a prebuilt binary. A Rust
+  toolchain is only required to [build from source](#build-from-source).
+- **No Node.js needed** for the core server (files, terminal, git, pairing).
+  Node is only required by the **Chat AI agents** (kilo / opencode): those
+  CLIs are Node-based, so install them on the host yourself (`kilo` /
+  `opencode` must be on your PATH) if you want chat.
+- **`git` is required** for the app's Source Control features — the server
+  shells out to the `git` binary on the host. Install it if your system
+  doesn't already have it.
+- Terminal tabs run your host's login shell — present on every Linux/macOS
+  system.
+
 ### Recommended: install script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/n-o-ide/n-o-ide-server/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
 ```
 
 What it does: detects your OS/arch, downloads the matching binary from the
@@ -45,7 +59,7 @@ upgrades you to the newest version.
 Prefer inspecting scripts before piping them into a shell? That's reasonable:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/n-o-ide/n-o-ide-server/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh -o install.sh
 less install.sh   # read it
 bash install.sh
 ```

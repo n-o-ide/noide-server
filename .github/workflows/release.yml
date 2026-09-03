@@ -79,6 +79,8 @@ jobs:
     needs: checksums
     runs-on: ubuntu-latest
     steps:
+      # Needed to read RELEASE_BODY.md (the curated part of the notes).
+      - uses: actions/checkout@v6
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -90,7 +92,11 @@ jobs:
           for t in linux-x86_64 linux-aarch64 darwin-x86_64 darwin-aarch64; do
             test -f "noide-server-$t" || { echo "missing noide-server-$t" >&2; exit 1; }
           done
+      # Curated notes come from RELEASE_BODY.md at the tag's commit (edit that
+      # file before tagging); the automatically generated "What's Changed"
+      # section is appended below it.
       - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
+          body_path: RELEASE_BODY.md
           generate_release_notes: true
