@@ -19,19 +19,33 @@ jobs:
             target: linux-x86_64
           - os: ubuntu-24.04-arm
             target: linux-aarch64
-          - os: macos-13
-            target: darwin-x86_64
-          - os: macos-14
+          # GitHub retired its Intel macOS runners (macos-13). macOS runners
+          # are Apple Silicon now, so darwin-x86_64 is cross-compiled here by
+          # adding the Intel target — rustc links macOS->macOS cross-builds
+          # natively with no extra toolchain.
+          - os: macos-15
             target: darwin-aarch64
+          - os: macos-15
+            target: darwin-x86_64
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build (release)
-        run: cargo build --release --locked
+        run: |
+          if [ "${{ matrix.target }}" = "darwin-x86_64" ]; then
+            rustup target add x86_64-apple-darwin
+            cargo build --release --locked --target x86_64-apple-darwin
+          else
+            cargo build --release --locked
+          fi
       - name: Package binary
         run: |
-          cp target/release/noide-server "noide-server-${{ matrix.target }}"
+          BIN="target/release/noide-server"
+          if [ "${{ matrix.target }}" = "darwin-x86_64" ]; then
+            BIN="target/x86_64-apple-darwin/release/noide-server"
+          fi
+          cp "$BIN" "noide-server-${{ matrix.target }}"
           chmod +x "noide-server-${{ matrix.target }}"
       - name: Smoke test the actual artifact
         if: runner.os == 'Linux'
