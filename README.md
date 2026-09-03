@@ -30,6 +30,7 @@ Supported platforms:
 |----|--------------|-------|
 | Linux | x86_64, aarch64 | aarch64 targets Raspberry Pi / ARM servers |
 | macOS | x86_64 (Intel), aarch64 (Apple Silicon) | see [macOS note](#macos-note) |
+| Windows | x86_64 | see [Windows note](#windows-note) |
 
 ### Requirements
 
@@ -42,8 +43,8 @@ Supported platforms:
 - **`git` is required** for the app's Source Control features — the server
   shells out to the `git` binary on the host. Install it if your system
   doesn't already have it.
-- Terminal tabs run your host's login shell — present on every Linux/macOS
-  system.
+- Terminal tabs run your host's login shell — zsh/bash on Linux/macOS and
+  PowerShell on Windows.
 
 ### Recommended: install script
 
@@ -100,7 +101,8 @@ Notes:
 
 ### Manual install
 
-Download `noide-server-<os>-<arch>` from the [releases](https://github.com/n-o-ide/noide-server/releases)
+Download `noide-server-<os>-<arch>` (`noide-server-windows-x86_64.exe` on
+Windows) from the [releases](https://github.com/n-o-ide/noide-server/releases)
 page and verify it against the published `SHA256SUMS`:
 
 ```bash
@@ -120,6 +122,23 @@ verified", remove the quarantine attribute once:
 ```bash
 xattr -d com.apple.quarantine "$(command -v noide-server)"
 ```
+
+<a name="windows-note"></a>
+**Windows note:** the release binary is `noide-server-windows-x86_64.exe`.
+Binaries are unsigned, so SmartScreen may warn "Windows protected your PC" —
+click **More info → Run anyway**, or launch it from PowerShell and verify it
+against the published `SHA256SUMS`:
+
+```powershell
+curl.exe -fLO https://github.com/n-o-ide/noide-server/releases/latest/download/noide-server-windows-x86_64.exe
+curl.exe -fLO https://github.com/n-o-ide/noide-server/releases/latest/download/SHA256SUMS
+certutil -hashfile noide-server-windows-x86_64.exe SHA256   # compare with SHA256SUMS
+.\noide-server-windows-x86_64.exe --version
+```
+
+Terminal tabs default to PowerShell on Windows. **git** is required for
+Source Control — install [Git for Windows](https://git-scm.com/download/win)
+if it isn't already on your PATH.
 
 ### Termux (Android)
 
