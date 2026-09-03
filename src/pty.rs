@@ -232,6 +232,10 @@ fn kill_session(session: Session) -> Result<(), Box<dyn std::error::Error>> {
     }
     #[cfg(not(unix))]
     {
+        // portable-pty's kill() takes &mut self; rebind here so the unix
+        // build (which only takes shared borrows above) does not trip an
+        // unused-mut lint.
+        let mut child = child;
         let _ = child.kill();
     }
     Ok(())
