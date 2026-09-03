@@ -24,7 +24,7 @@ jobs:
           - os: macos-14
             target: darwin-aarch64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build (release)
@@ -76,7 +76,7 @@ jobs:
           for t in linux-x86_64 linux-aarch64 darwin-x86_64 darwin-aarch64; do
             test -f "noide-server-$t" || { echo "missing noide-server-$t" >&2; exit 1; }
           done
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
           generate_release_notes: true
