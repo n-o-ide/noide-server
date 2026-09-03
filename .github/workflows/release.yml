@@ -1,0 +1,82 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+          - os: ubuntu-24.04-arm
+            target: linux-aarch64
+          - os: macos-13
+            target: darwin-x86_64
+          - os: macos-14
+            target: darwin-aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build (release)
+        run: cargo build --release --locked
+      - name: Package binary
+        run: |
+          cp target/release/noide-server "noide-server-${{ matrix.target }}"
+          chmod +x "noide-server-${{ matrix.target }}"
+      - name: Smoke test the actual artifact
+        if: runner.os == 'Linux'
+        run: node scripts/smoke-test.mjs "./noide-server-${{ matrix.target }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: noide-server-${{ matrix.target }}
+          if-no-files-found: error
+
+  checksums:
+    name: checksums
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Generate SHA256SUMS
+        working-directory: artifacts
+        run: sha256sum noide-server-* | tee SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checksums
+          path: artifacts/SHA256SUMS
+          if-no-files-found: error
+
+  publish:
+    name: publish release
+    needs: checksums
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Verify all 4 binaries present
+        working-directory: dist
+        run: |
+          test -f SHA256SUMS
+          for t in linux-x86_64 linux-aarch64 darwin-x86_64 darwin-aarch64; do
+            test -f "noide-server-$t" || { echo "missing noide-server-$t" >&2; exit 1; }
+          done
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
