@@ -50,13 +50,20 @@ impl ChatProcessTracker {
                 // any grandchildren it spawned for tool execution).
                 libc::kill(-(pid as i32), libc::SIGTERM);
             }
-            #[cfg(not(unix))]
-            {
-                // On Windows there's no process-group kill; just kill the
-                // direct child.  Grandchildren are short-lived and will be
-                // reaped by the OS once the parent exits.
-                unsafe {
-                    libc::terminate_process(pid as *mut _, 1);
+            #[cfg(windows)]
+            unsafe {
+                use windows_sys::Win32::Foundation::CloseHandle;
+                use windows_sys::Win32::System::Threading::{
+                    OpenProcess, TerminateProcess, PROCESS_TERMINATE,
+                };
+                // Windows has no process groups; open the process with
+                // terminate rights and kill the direct child. Grandchildren
+                // are short-lived and will be reaped by the OS once the
+                // parent exits.
+                let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+                if !handle.is_null() {
+                    TerminateProcess(handle, 1);
+                    CloseHandle(handle);
                 }
             }
         }
@@ -775,7 +782,24 @@ async fn handle(
                 if !api_key.trim().is_empty() {
                     cmd.env("OPENROUTER_API_KEY", &api_key);
                 }
-                cmd.env("TERM", "xterm-256color");
+                // Run the agent CLI non-interactively and color-free so
+                // captured tool output is clean, deterministic and can never
+                // hang: NO_COLOR/CLICOLOR/TERM=dumb kill ANSI (incl.
+                // termcolor tools), CI=1 silences spinners/banners, C.UTF-8 +
+                // PYTHONIOENCODING keep tool output deterministic, and
+                // PAGER=cat means no command can block on an interactive
+                // pager. FORCE_COLOR is removed so nothing re-enables color.
+                cmd.env("NO_COLOR", "1");
+                cmd.env("CLICOLOR", "0");
+                cmd.env("TERM", "dumb");
+                cmd.env("CI", "1");
+                cmd.env("LANG", "C.UTF-8");
+                cmd.env("LC_ALL", "C.UTF-8");
+                cmd.env("PYTHONIOENCODING", "utf-8");
+                cmd.env("GIT_PAGER", "cat");
+                cmd.env("PAGER", "cat");
+                cmd.env_remove("FORCE_COLOR");
+                cmd.env_remove("CLICOLOR_FORCE");
                 // Switch kilo/opencode's real mode via an inline config. Prompt
                 // seeded instructions are not enough — kilo's mode system
                 // overrides them; KILO_CONFIG_CONTENT is deep-merged with highest

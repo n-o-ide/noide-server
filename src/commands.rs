@@ -114,6 +114,16 @@ pub fn run_git(path: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
+/// Resolve the repository root that `path` belongs to. `path` is the folder
+/// the user has open, which may be a subdirectory of the repository. `git
+/// status --porcelain` always reports paths relative to the repo root, so any
+/// command that takes one of those paths must run from the root too — running
+/// them from a subfolder makes git resolve the paths against the subfolder
+/// (or silently no-op when the file lives outside it).
+fn repo_root(path: &str) -> Result<String, String> {
+    run_git(path, &["rev-parse", "--show-toplevel"]).map(|root| root.trim().to_string())
+}
+
 pub fn git_init(path: String) -> Result<String, String> {
     run_git(&path, &["init"])
 }
@@ -156,12 +166,15 @@ pub fn get_git_status(path: String) -> Result<GitStatus, String> {
         return Err("not a git repository".to_string());
     }
 
-    let status_output = run_git(&path, &["status", "-b", "--porcelain"])?;
+    // Status paths are repo-root-relative (see repo_root), so query from the
+    // root regardless of which folder inside the repo is open.
+    let root = repo_root(&path)?;
+    let status_output = run_git(&root, &["status", "-b", "--porcelain"])?;
     let mut lines = status_output.lines();
     let (branch, ahead, behind) = parse_branch_head(lines.next().unwrap_or(""));
 
     // Authoritative conflict list: any file with an unmerged index entry.
-    let unmerged: Vec<String> = run_git(&path, &["diff", "--name-only", "--diff-filter=U"])
+    let unmerged: Vec<String> = run_git(&root, &["diff", "--name-only", "--diff-filter=U"])
         .unwrap_or_default()
         .lines()
         .map(|s| s.trim().to_string())
@@ -233,17 +246,20 @@ pub fn get_git_status(path: String) -> Result<GitStatus, String> {
         staged_details,
         worktree_details,
         unmerged,
-        worktree_stats: parse_numstat(&path, &["diff", "--numstat"]),
-        staged_stats: parse_numstat(&path, &["diff", "--cached", "--numstat"]),
+        worktree_stats: parse_numstat(&root, &["diff", "--numstat"]),
+        staged_stats: parse_numstat(&root, &["diff", "--cached", "--numstat"]),
     })
 }
 
 pub fn get_git_diff(path: String, file: String) -> Result<String, String> {
-    run_git(&path, &["diff", "--no-color", "--", &file])
+    run_git(&repo_root(&path)?, &["diff", "--no-color", "--", &file])
 }
 
 pub fn get_git_staged_diff(path: String, file: String) -> Result<String, String> {
-    run_git(&path, &["diff", "--cached", "--no-color", "--", &file])
+    run_git(
+        &repo_root(&path)?,
+        &["diff", "--cached", "--no-color", "--", &file],
+    )
 }
 
 /// Content of a file at HEAD (for computing editor change highlights).
@@ -262,35 +278,41 @@ pub fn git_show_index(path: String, file: String) -> Result<String, String> {
 }
 
 pub fn git_add(path: String, file: String) -> Result<String, String> {
-    run_git(&path, &["add", "--", &file])
+    run_git(&repo_root(&path)?, &["add", "--", &file])
 }
 
 pub fn git_stage_all(path: String) -> Result<String, String> {
-    run_git(&path, &["add", "-A", "."])
+    run_git(&repo_root(&path)?, &["add", "-A", "."])
 }
 
 pub fn git_unstage(path: String, file: String) -> Result<String, String> {
-    match run_git(&path, &["reset", "HEAD", "--", &file]) {
+    let root = repo_root(&path)?;
+    match run_git(&root, &["reset", "HEAD", "--", &file]) {
         Ok(v) => Ok(v),
         // Repos without an initial commit cannot reset; use rm --cached.
-        Err(_) => run_git(&path, &["rm", "--cached", "--", &file]),
+        Err(_) => run_git(&root, &["rm", "--cached", "--", &file]),
     }
 }
 
 pub fn git_unstage_all(path: String) -> Result<String, String> {
-    match run_git(&path, &["reset", "HEAD"]) {
+    let root = repo_root(&path)?;
+    match run_git(&root, &["reset", "HEAD"]) {
         Ok(v) => Ok(v),
-        Err(_) => run_git(&path, &["rm", "-r", "--cached", "."]),
+        Err(_) => run_git(&root, &["rm", "-r", "--cached", "."]),
     }
 }
 
 /// VS Code-style discard: checkout tracked files, delete untracked ones.
+/// Runs at the repo root because status paths are repo-root-relative — e.g.
+/// with a subfolder open, an untracked file at the repo root must still be
+/// found and deleted.
 pub fn git_discard(path: String, file: String) -> Result<String, String> {
-    let tracked = run_git(&path, &["ls-files", "--error-unmatch", "--", &file]).is_ok();
+    let root = repo_root(&path)?;
+    let tracked = run_git(&root, &["ls-files", "--error-unmatch", "--", &file]).is_ok();
     if tracked {
-        return run_git(&path, &["checkout", "--", &file]);
+        return run_git(&root, &["checkout", "--", &file]);
     }
-    let full = Path::new(&path).join(&file);
+    let full = Path::new(&root).join(&file);
     if file.ends_with('/') || full.is_dir() {
         fs::remove_dir_all(&full).map_err(|e| format!("Failed to delete {}: {}", file, e))?;
     } else if full.is_file() {
@@ -303,17 +325,18 @@ pub fn git_discard(path: String, file: String) -> Result<String, String> {
 /// files/directories. Ignored files are left alone (like VS Code).
 /// Works on repositories without an initial commit.
 pub fn git_discard_all(path: String) -> Result<String, String> {
-    let has_head = run_git(&path, &["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok();
+    let root = repo_root(&path)?;
+    let has_head = run_git(&root, &["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok();
 
     // Unstage everything so staged entries become part of the worktree sweep.
-    run_git(&path, &["reset"])?;
+    run_git(&root, &["reset"])?;
 
     if has_head {
-        run_git(&path, &["reset", "--hard", "HEAD"])?;
+        run_git(&root, &["reset", "--hard", "HEAD"])?;
     }
 
     // Remove untracked files and directories (not ignored ones).
-    run_git(&path, &["clean", "-fd"])
+    run_git(&root, &["clean", "-fd"])
 }
 
 pub fn git_commit(path: String, message: String, amend: Option<bool>) -> Result<String, String> {
@@ -484,13 +507,14 @@ pub fn git_merge_abort(path: String) -> Result<String, String> {
 /// Resolve a conflicted file by taking one side and staging it. `side` is
 /// "ours" (current branch) or "theirs" (the branch being merged in).
 pub fn git_resolve_conflict(path: String, file: String, side: String) -> Result<String, String> {
+    let root = repo_root(&path)?;
     let flag = if side == "theirs" {
         "--theirs"
     } else {
         "--ours"
     };
-    run_git(&path, &["checkout", flag, "--", &file])?;
-    run_git(&path, &["add", "--", &file])
+    run_git(&root, &["checkout", flag, "--", &file])?;
+    run_git(&root, &["add", "--", &file])
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1356,6 +1380,26 @@ pub fn chat_stream(
     if !api_key.trim().is_empty() {
         cmd.env("OPENROUTER_API_KEY", &api_key);
     }
+    // Run the agent CLI non-interactively and color-free so captured tool
+    // output is clean, deterministic and can never hang:
+    //   * NO_COLOR/CLICOLOR/TERM=dumb – no ANSI escapes (incl. termcolor)
+    //   * CI=1                         – terse output (no spinners/banners)
+    //   * C.UTF-8 + PYTHONIOENCODING   – deterministic UTF-8, no Python
+    //                                    UnicodeEncodeError crashes
+    //   * PAGER=cat                    – no command can block on a pager
+    // These propagate to every tool command the agent spawns.
+    // FORCE_COLOR is removed so nothing can re-enable color.
+    cmd.env("NO_COLOR", "1");
+    cmd.env("CLICOLOR", "0");
+    cmd.env("TERM", "dumb");
+    cmd.env("CI", "1");
+    cmd.env("LANG", "C.UTF-8");
+    cmd.env("LC_ALL", "C.UTF-8");
+    cmd.env("PYTHONIOENCODING", "utf-8");
+    cmd.env("GIT_PAGER", "cat");
+    cmd.env("PAGER", "cat");
+    cmd.env_remove("FORCE_COLOR");
+    cmd.env_remove("CLICOLOR_FORCE");
     // Switch kilo's real mode via an inline config. Seeding the prompt with
     // mode instructions is not enough — kilo's own mode system overrides it.
     // KILO_CONFIG_CONTENT is deep-merged with highest precedence, so this
