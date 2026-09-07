@@ -219,10 +219,7 @@ impl PtyManager {
                     match reader.read(&mut buf) {
                         Ok(0) => break,
                         Ok(n) => {
-                            if feed
-                                .blocking_send(Out::Data(buf[..n].to_vec()))
-                                .is_err()
-                            {
+                            if feed.blocking_send(Out::Data(buf[..n].to_vec())).is_err() {
                                 // Stream task gone (session killed). The pty
                                 // master handle drops with it, unblocking us.
                                 return;
@@ -385,7 +382,9 @@ impl PtyManager {
         }
         let info = AttachInfo {
             pid: session.pid,
-            from: from.map(|f| f.max(st.ring_start())).unwrap_or(st.ring_start()),
+            from: from
+                .map(|f| f.max(st.ring_start()))
+                .unwrap_or(st.ring_start()),
             end: st.total,
             truncated: from.map(|f| f < st.ring_start()).unwrap_or(false),
         };

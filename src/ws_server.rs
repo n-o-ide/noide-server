@@ -293,8 +293,7 @@ fn spawn_subscriber_task(
         loop {
             let item = match flush_at {
                 Some(deadline) => {
-                    let remaining =
-                        deadline.saturating_duration_since(tokio::time::Instant::now());
+                    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
                     match tokio::time::timeout(remaining, rx.recv()).await {
                         Err(_elapsed) => {
                             // Quiet for the whole window — send what we have.
@@ -390,8 +389,7 @@ pub async fn start(
         let agent_servers = agent_servers.clone();
         let token = token.clone();
         tokio::spawn(async move {
-            if let Err(e) =
-                handle_connection(stream, pty, chat_tracker, agent_servers, token).await
+            if let Err(e) = handle_connection(stream, pty, chat_tracker, agent_servers, token).await
             {
                 eprintln!("[NoIDE] WS connection error: {}", e);
             }
@@ -466,10 +464,7 @@ async fn handle_connection(
     let (out_tx, mut out_rx) = mpsc::channel::<Message>(OUT_CAP);
 
     // Tracks running chat-stream child PIDs so they can be cancelled.
-    let processes = Arc::new(tokio::sync::Mutex::new(HashMap::<
-        String,
-        u32,
-    >::new()));
+    let processes = Arc::new(tokio::sync::Mutex::new(HashMap::<String, u32>::new()));
 
     // Sessions this connection is currently subscribed to (spawned or
     // attached). On close we detach from them — they keep running and their
@@ -550,9 +545,7 @@ async fn handle_connection(
                     if let Some(event) = v.get("event").and_then(|e| e.as_str()) {
                         if event == "__ping" {
                             let _ = out_tx
-                                .send(Message::Text(
-                                    json!({ "event": "__pong" }).to_string(),
-                                ))
+                                .send(Message::Text(json!({ "event": "__pong" }).to_string()))
                                 .await;
                             // Reset the idle clock on the pong we just sent — the
                             // connection is demonstrably alive.
@@ -660,8 +653,12 @@ async fn handle_connection(
             };
             let handle = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
             if !handle.is_null() {
-                unsafe { TerminateProcess(handle, 1); }
-                unsafe { CloseHandle(handle); }
+                unsafe {
+                    TerminateProcess(handle, 1);
+                }
+                unsafe {
+                    CloseHandle(handle);
+                }
             }
         }
     }
@@ -723,8 +720,7 @@ async fn handle(
             // Subscribe immediately so the very first prompt is delivered.
             // Replay from the ring covers any bytes produced in the window
             // between spawn and subscribe.
-            let info =
-                attach_and_stream(&session_id, pty, None, out_tx, stats, &subscribed)?;
+            let info = attach_and_stream(&session_id, pty, None, out_tx, stats, &subscribed)?;
             Ok(json!({
                 "id": spawned.id,
                 "pid": spawned.pid,
@@ -1093,14 +1089,14 @@ async fn handle(
                     commands::chat_cli_check(&command),
                     commands::CliStatus::Available
                 ) {
-// resolve_agent_bin returned a path, but the binary at that
-                // path doesn't look like the agent we asked for. Surface a
-                // clear "wrong binary" error instead of letting the run
-                // proceed and produce a silent failure.
-                let error = commands::cli_wrong_binary_message(&command);
-                let msg = json!({"event": "chat-stream-done", "payload": {"id": &rid, "error": error}});
-                let _ = event_tx.send(Message::Text(msg.to_string())).await;
-                return;
+                    // resolve_agent_bin returned a path, but the binary at that
+                    // path doesn't look like the agent we asked for. Surface a
+                    // clear "wrong binary" error instead of letting the run
+                    // proceed and produce a silent failure.
+                    let error = commands::cli_wrong_binary_message(&command);
+                    let msg = json!({"event": "chat-stream-done", "payload": {"id": &rid, "error": error}});
+                    let _ = event_tx.send(Message::Text(msg.to_string())).await;
+                    return;
                 }
 
                 // Materialize attachment contents to temp files and pass them via
@@ -1325,12 +1321,14 @@ async fn handle(
                     use windows_sys::Win32::System::Threading::{
                         OpenProcess, TerminateProcess, PROCESS_TERMINATE,
                     };
-                    let handle = unsafe {
-                        OpenProcess(PROCESS_TERMINATE, 0, pid)
-                    };
+                    let handle = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
                     if !handle.is_null() {
-                        unsafe { TerminateProcess(handle, 1); }
-                        unsafe { CloseHandle(handle); }
+                        unsafe {
+                            TerminateProcess(handle, 1);
+                        }
+                        unsafe {
+                            CloseHandle(handle);
+                        }
                     }
                 }
                 Ok(json!({ "cancelled": true }))
@@ -1354,7 +1352,10 @@ async fn handle(
             // plain boolean, which collapsed Missing and WrongBinary into
             // "not installed" and was the reason a stale `~/.local/bin`
             // shadow was silently used as the agent CLI.
-            Ok(serde_json::to_value(commands::chat_cli_check(&command).as_str()).unwrap_or(Value::Null))
+            Ok(
+                serde_json::to_value(commands::chat_cli_check(&command).as_str())
+                    .unwrap_or(Value::Null),
+            )
         }
         other => Err(format!("unknown command: {}", other)),
     }

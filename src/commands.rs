@@ -820,7 +820,32 @@ fn read_dir_recursive(
             Err(_) => false,
         };
 
-        if name == ".git" || name == "node_modules" || name == "target" || name == "dist" || name == "build" || name == ".noTerm" || name == ".vscode" || name == ".idea" || name == ".DS_Store" || name == "__pycache__" || name == ".pytest_cache" || name == ".next" || name == ".nuxt" || name == ".venv" || name == "venv" || name == "vendor" || name == "Pods" || name == "bin" || name == "obj" || name == ".cache" || name == "coverage" || name == ".terraform" || name == "bower_components" || name == "jspm_packages" || name == ".angular" {
+        if name == ".git"
+            || name == "node_modules"
+            || name == "target"
+            || name == "dist"
+            || name == "build"
+            || name == ".noTerm"
+            || name == ".vscode"
+            || name == ".idea"
+            || name == ".DS_Store"
+            || name == "__pycache__"
+            || name == ".pytest_cache"
+            || name == ".next"
+            || name == ".nuxt"
+            || name == ".venv"
+            || name == "venv"
+            || name == "vendor"
+            || name == "Pods"
+            || name == "bin"
+            || name == "obj"
+            || name == ".cache"
+            || name == "coverage"
+            || name == ".terraform"
+            || name == "bower_components"
+            || name == "jspm_packages"
+            || name == ".angular"
+        {
             continue;
         }
 
@@ -882,7 +907,33 @@ pub fn file_exists(path: String) -> Result<bool, String> {
 
 // ===== Search =====
 
-const WALK_IGNORES: [&str; 25] = [".git", "node_modules", "target", "dist", "build", ".noTerm", ".vscode", ".idea", ".DS_Store", "__pycache__", ".pytest_cache", ".next", ".nuxt", ".venv", "venv", "vendor", "Pods", "bin", "obj", ".cache", "coverage", ".terraform", "bower_components", "jspm_packages", ".angular"];
+const WALK_IGNORES: [&str; 25] = [
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".noTerm",
+    ".vscode",
+    ".idea",
+    ".DS_Store",
+    "__pycache__",
+    ".pytest_cache",
+    ".next",
+    ".nuxt",
+    ".venv",
+    "venv",
+    "vendor",
+    "Pods",
+    "bin",
+    "obj",
+    ".cache",
+    "coverage",
+    ".terraform",
+    "bower_components",
+    "jspm_packages",
+    ".angular",
+];
 const SEARCH_MAX_RESULTS: usize = 500;
 const MAX_FILE_BYTES: usize = 1_000_000;
 
@@ -893,12 +944,17 @@ fn is_ignored_name(name: &str) -> bool {
 fn is_ignored_path(path: &Path) -> bool {
     let path_str = path.to_string_lossy().to_string();
     // Ignore specific public folders inside android and ios build directories
-    path_str.contains("/android/app/src/main/assets/public/") ||
-    path_str.contains("/ios/App/App/public/")
+    path_str.contains("/android/app/src/main/assets/public/")
+        || path_str.contains("/ios/App/App/public/")
 }
 
 fn walk_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
-    fn rec(dir: &Path, depth: usize, out: &mut Vec<String>, base_dir: &Path) -> std::io::Result<()> {
+    fn rec(
+        dir: &Path,
+        depth: usize,
+        out: &mut Vec<String>,
+        base_dir: &Path,
+    ) -> std::io::Result<()> {
         if depth > 12 || out.len() > 20_000 {
             return Ok(());
         }
@@ -1160,7 +1216,9 @@ fn looks_like_agent(exe: &std::path::Path, command: &str) -> bool {
         .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
         .collect();
     let needle = format!("{} run [", command);
-    stripped.lines().any(|line| line.trim_start().starts_with(&needle))
+    stripped
+        .lines()
+        .any(|line| line.trim_start().starts_with(&needle))
 }
 
 /// Directories to search for an agent CLI when it isn't resolvable via the

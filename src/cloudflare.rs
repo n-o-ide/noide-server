@@ -28,8 +28,12 @@ fn cloudflared_binary_name() -> &'static str {
 fn cloudflared_path() -> std::path::PathBuf {
     #[cfg(target_os = "windows")]
     {
-        let base = std::env::var("LOCALAPPDATA")
-            .unwrap_or_else(|_| format!("{}\\AppData\\Local", std::env::var("USERPROFILE").unwrap_or_default()));
+        let base = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| {
+            format!(
+                "{}\\AppData\\Local",
+                std::env::var("USERPROFILE").unwrap_or_default()
+            )
+        });
         std::path::PathBuf::from(base)
             .join("noide")
             .join(cloudflared_binary_name())
@@ -89,14 +93,13 @@ fn ensure_cloudflared(dest: &std::path::Path) -> Result<std::path::PathBuf, Stri
 
     // Write to a temp file first, then atomically rename.
     if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("failed to create ~/.noide: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("failed to create ~/.noide: {e}"))?;
     }
 
     let tmp = dest.with_extension("tmp");
     {
-        let mut file = std::fs::File::create(&tmp)
-            .map_err(|e| format!("failed to create temp file: {e}"))?;
+        let mut file =
+            std::fs::File::create(&tmp).map_err(|e| format!("failed to create temp file: {e}"))?;
         let bytes = resp
             .bytes()
             .map_err(|e| format!("failed to read download: {e}"))?;
@@ -104,8 +107,7 @@ fn ensure_cloudflared(dest: &std::path::Path) -> Result<std::path::PathBuf, Stri
             .map_err(|e| format!("failed to write binary: {e}"))?;
     }
 
-    std::fs::rename(&tmp, dest)
-        .map_err(|e| format!("failed to install cloudflared: {e}"))?;
+    std::fs::rename(&tmp, dest).map_err(|e| format!("failed to install cloudflared: {e}"));
 
     // Make executable on Unix.
     #[cfg(unix)]
@@ -154,14 +156,13 @@ pub async fn start_tunnel(port: u16) -> Result<(String, Child), String> {
             .next_line()
             .await
             .map_err(|e| format!("cloudflared stderr read error: {e}"))?
-            .ok_or_else(|| {
-                "cloudflared exited before producing a tunnel URL".to_string()
-            })?;
+            .ok_or_else(|| "cloudflared exited before producing a tunnel URL".to_string())?;
 
         if line.contains("trycloudflare.com") {
-            if let Some(url) = line.split_whitespace().find(|w| {
-                w.starts_with("https://") && w.contains("trycloudflare.com")
-            }) {
+            if let Some(url) = line
+                .split_whitespace()
+                .find(|w| w.starts_with("https://") && w.contains("trycloudflare.com"))
+            {
                 break url.to_string();
             }
         }
