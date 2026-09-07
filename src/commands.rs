@@ -953,7 +953,7 @@ fn walk_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
         dir: &Path,
         depth: usize,
         out: &mut Vec<String>,
-        base_dir: &Path,
+        _base_dir: &Path,
     ) -> std::io::Result<()> {
         if depth > 12 || out.len() > 20_000 {
             return Ok(());
@@ -974,7 +974,7 @@ fn walk_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
                 continue;
             }
             if p.is_dir() {
-                rec(&p, depth + 1, out, base_dir)?;
+                rec(&p, depth + 1, out, _base_dir)?;
             } else {
                 out.push(p.to_string_lossy().to_string());
             }

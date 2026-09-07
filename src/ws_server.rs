@@ -326,10 +326,9 @@ fn spawn_subscriber_task(
                     pending.extend_from_slice(&data);
                     if pending.len() >= FRAME_MAX {
                         flush_batch!();
-                    } else if idle {
-                        flush_batch!();
-                    } else if flush_at.is_none() {
+                    } else if idle || flush_at.is_none() {
                         flush_at = Some(tokio::time::Instant::now() + BATCH_WINDOW);
+                        flush_batch!();
                     }
                 }
                 SubMsg::Exit { code } => {
