@@ -29,6 +29,12 @@ flate2 = "1"
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }
 
+# Windows-only: terminating a process by PID (chat CLI cleanup on shutdown).
+# The `libc` crate does not expose Win32 process APIs, so we use windows-sys
+# (already in the tree via mio/ctrlc) with just the two modules we need.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }
+
 [profile.release]
 panic = "abort"
 codegen-units = 1
