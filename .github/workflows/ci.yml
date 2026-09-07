@@ -26,6 +26,11 @@ jobs:
     name: build ${{ matrix.target }}
     needs: check
     runs-on: ${{ matrix.os }}
+    # Packaging steps below use bash conditionals; windows-latest defaults to
+    # PowerShell but ships Git Bash, so pin bash for the whole job.
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -42,6 +47,10 @@ jobs:
             target: darwin-aarch64
           - os: macos-15
             target: darwin-x86_64
+          # windows-latest is x64 natively, so this builds straight out of
+          # the box with the MSVC toolchain (no extra target needed).
+          - os: windows-latest
+            target: windows-x86_64
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable

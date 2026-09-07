@@ -114,6 +114,16 @@ pub fn run_git(path: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
+/// Resolve the repository root that `path` belongs to. `path` is the folder
+/// the user has open, which may be a subdirectory of the repository. `git
+/// status --porcelain` always reports paths relative to the repo root, so any
+/// command that takes one of those paths must run from the root too — running
+/// them from a subfolder makes git resolve the paths against the subfolder
+/// (or silently no-op when the file lives outside it).
+fn repo_root(path: &str) -> Result<String, String> {
+    run_git(path, &["rev-parse", "--show-toplevel"]).map(|root| root.trim().to_string())
+}
+
 pub fn git_init(path: String) -> Result<String, String> {
     run_git(&path, &["init"])
 }
@@ -156,12 +166,15 @@ pub fn get_git_status(path: String) -> Result<GitStatus, String> {
         return Err("not a git repository".to_string());
     }
 
-    let status_output = run_git(&path, &["status", "-b", "--porcelain"])?;
+    // Status paths are repo-root-relative (see repo_root), so query from the
+    // root regardless of which folder inside the repo is open.
+    let root = repo_root(&path)?;
+    let status_output = run_git(&root, &["status", "-b", "--porcelain"])?;
     let mut lines = status_output.lines();
     let (branch, ahead, behind) = parse_branch_head(lines.next().unwrap_or(""));
 
     // Authoritative conflict list: any file with an unmerged index entry.
-    let unmerged: Vec<String> = run_git(&path, &["diff", "--name-only", "--diff-filter=U"])
+    let unmerged: Vec<String> = run_git(&root, &["diff", "--name-only", "--diff-filter=U"])
         .unwrap_or_default()
         .lines()
         .map(|s| s.trim().to_string())
@@ -233,17 +246,20 @@ pub fn get_git_status(path: String) -> Result<GitStatus, String> {
         staged_details,
         worktree_details,
         unmerged,
-        worktree_stats: parse_numstat(&path, &["diff", "--numstat"]),
-        staged_stats: parse_numstat(&path, &["diff", "--cached", "--numstat"]),
+        worktree_stats: parse_numstat(&root, &["diff", "--numstat"]),
+        staged_stats: parse_numstat(&root, &["diff", "--cached", "--numstat"]),
     })
 }
 
 pub fn get_git_diff(path: String, file: String) -> Result<String, String> {
-    run_git(&path, &["diff", "--no-color", "--", &file])
+    run_git(&repo_root(&path)?, &["diff", "--no-color", "--", &file])
 }
 
 pub fn get_git_staged_diff(path: String, file: String) -> Result<String, String> {
-    run_git(&path, &["diff", "--cached", "--no-color", "--", &file])
+    run_git(
+        &repo_root(&path)?,
+        &["diff", "--cached", "--no-color", "--", &file],
+    )
 }
 
 /// Content of a file at HEAD (for computing editor change highlights).
@@ -262,35 +278,41 @@ pub fn git_show_index(path: String, file: String) -> Result<String, String> {
 }
 
 pub fn git_add(path: String, file: String) -> Result<String, String> {
-    run_git(&path, &["add", "--", &file])
+    run_git(&repo_root(&path)?, &["add", "--", &file])
 }
 
 pub fn git_stage_all(path: String) -> Result<String, String> {
-    run_git(&path, &["add", "-A", "."])
+    run_git(&repo_root(&path)?, &["add", "-A", "."])
 }
 
 pub fn git_unstage(path: String, file: String) -> Result<String, String> {
-    match run_git(&path, &["reset", "HEAD", "--", &file]) {
+    let root = repo_root(&path)?;
+    match run_git(&root, &["reset", "HEAD", "--", &file]) {
         Ok(v) => Ok(v),
         // Repos without an initial commit cannot reset; use rm --cached.
-        Err(_) => run_git(&path, &["rm", "--cached", "--", &file]),
+        Err(_) => run_git(&root, &["rm", "--cached", "--", &file]),
     }
 }
 
 pub fn git_unstage_all(path: String) -> Result<String, String> {
-    match run_git(&path, &["reset", "HEAD"]) {
+    let root = repo_root(&path)?;
+    match run_git(&root, &["reset", "HEAD"]) {
         Ok(v) => Ok(v),
-        Err(_) => run_git(&path, &["rm", "-r", "--cached", "."]),
+        Err(_) => run_git(&root, &["rm", "-r", "--cached", "."]),
     }
 }
 
 /// VS Code-style discard: checkout tracked files, delete untracked ones.
+/// Runs at the repo root because status paths are repo-root-relative — e.g.
+/// with a subfolder open, an untracked file at the repo root must still be
+/// found and deleted.
 pub fn git_discard(path: String, file: String) -> Result<String, String> {
-    let tracked = run_git(&path, &["ls-files", "--error-unmatch", "--", &file]).is_ok();
+    let root = repo_root(&path)?;
+    let tracked = run_git(&root, &["ls-files", "--error-unmatch", "--", &file]).is_ok();
     if tracked {
-        return run_git(&path, &["checkout", "--", &file]);
+        return run_git(&root, &["checkout", "--", &file]);
     }
-    let full = Path::new(&path).join(&file);
+    let full = Path::new(&root).join(&file);
     if file.ends_with('/') || full.is_dir() {
         fs::remove_dir_all(&full).map_err(|e| format!("Failed to delete {}: {}", file, e))?;
     } else if full.is_file() {
@@ -303,17 +325,18 @@ pub fn git_discard(path: String, file: String) -> Result<String, String> {
 /// files/directories. Ignored files are left alone (like VS Code).
 /// Works on repositories without an initial commit.
 pub fn git_discard_all(path: String) -> Result<String, String> {
-    let has_head = run_git(&path, &["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok();
+    let root = repo_root(&path)?;
+    let has_head = run_git(&root, &["rev-parse", "--verify", "--quiet", "HEAD"]).is_ok();
 
     // Unstage everything so staged entries become part of the worktree sweep.
-    run_git(&path, &["reset"])?;
+    run_git(&root, &["reset"])?;
 
     if has_head {
-        run_git(&path, &["reset", "--hard", "HEAD"])?;
+        run_git(&root, &["reset", "--hard", "HEAD"])?;
     }
 
     // Remove untracked files and directories (not ignored ones).
-    run_git(&path, &["clean", "-fd"])
+    run_git(&root, &["clean", "-fd"])
 }
 
 pub fn git_commit(path: String, message: String, amend: Option<bool>) -> Result<String, String> {
@@ -484,13 +507,14 @@ pub fn git_merge_abort(path: String) -> Result<String, String> {
 /// Resolve a conflicted file by taking one side and staging it. `side` is
 /// "ours" (current branch) or "theirs" (the branch being merged in).
 pub fn git_resolve_conflict(path: String, file: String, side: String) -> Result<String, String> {
+    let root = repo_root(&path)?;
     let flag = if side == "theirs" {
         "--theirs"
     } else {
         "--ours"
     };
-    run_git(&path, &["checkout", flag, "--", &file])?;
-    run_git(&path, &["add", "--", &file])
+    run_git(&root, &["checkout", flag, "--", &file])?;
+    run_git(&root, &["add", "--", &file])
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -796,7 +820,7 @@ fn read_dir_recursive(
             Err(_) => false,
         };
 
-        if name == ".git" || name == "node_modules" || name == "target" || name == "dist" {
+        if name == ".git" || name == "node_modules" || name == "target" || name == "dist" || name == "build" || name == ".noTerm" || name == ".vscode" || name == ".idea" || name == ".DS_Store" || name == "__pycache__" || name == ".pytest_cache" || name == ".next" || name == ".nuxt" || name == ".venv" || name == "venv" || name == "vendor" || name == "Pods" || name == "bin" || name == "obj" || name == ".cache" || name == "coverage" || name == ".terraform" || name == "bower_components" || name == "jspm_packages" || name == ".angular" {
             continue;
         }
 
@@ -858,7 +882,7 @@ pub fn file_exists(path: String) -> Result<bool, String> {
 
 // ===== Search =====
 
-const WALK_IGNORES: [&str; 6] = [".git", "node_modules", "target", "dist", "build", ".noTerm"];
+const WALK_IGNORES: [&str; 25] = [".git", "node_modules", "target", "dist", "build", ".noTerm", ".vscode", ".idea", ".DS_Store", "__pycache__", ".pytest_cache", ".next", ".nuxt", ".venv", "venv", "vendor", "Pods", "bin", "obj", ".cache", "coverage", ".terraform", "bower_components", "jspm_packages", ".angular"];
 const SEARCH_MAX_RESULTS: usize = 500;
 const MAX_FILE_BYTES: usize = 1_000_000;
 
@@ -866,8 +890,15 @@ fn is_ignored_name(name: &str) -> bool {
     WALK_IGNORES.contains(&name)
 }
 
+fn is_ignored_path(path: &Path) -> bool {
+    let path_str = path.to_string_lossy().to_string();
+    // Ignore specific public folders inside android and ios build directories
+    path_str.contains("/android/app/src/main/assets/public/") ||
+    path_str.contains("/ios/App/App/public/")
+}
+
 fn walk_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
-    fn rec(dir: &Path, depth: usize, out: &mut Vec<String>) -> std::io::Result<()> {
+    fn rec(dir: &Path, depth: usize, out: &mut Vec<String>, base_dir: &Path) -> std::io::Result<()> {
         if depth > 12 || out.len() > 20_000 {
             return Ok(());
         }
@@ -883,15 +914,18 @@ fn walk_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
                 continue;
             }
             let p = entry.path();
+            if is_ignored_path(&p) {
+                continue;
+            }
             if p.is_dir() {
-                rec(&p, depth + 1, out)?;
+                rec(&p, depth + 1, out, base_dir)?;
             } else {
                 out.push(p.to_string_lossy().to_string());
             }
         }
         Ok(())
     }
-    rec(dir, 0, out).map_err(|e| format!("Failed to walk directory: {}", e))
+    rec(dir, 0, out, dir).map_err(|e| format!("Failed to walk directory: {}", e))
 }
 
 /// Full recursive file listing (absolute paths) for the fuzzy finder.
@@ -1091,25 +1125,72 @@ impl CliStatus {
     }
 }
 
-/// Token used to verify the binary's identity in `--version` output.
-fn agent_token(command: &str) -> &str {
-    command
+/// Identity check: invoke `<bin> run --help` and look for the agent's own
+/// `<command> run` usage line. This is far more reliable than parsing
+/// `--version` because both kilo and opencode print a bare version number
+/// (`7.4.22`, `1.18.27`) with no agent name, but their `run --help` output
+/// always contains `kilo run [message..]` / `opencode run [message..]`.
+/// Banner/ANSI noise is stripped before matching.
+///
+/// Returns `true` if the binary looks like the expected agent, `false` if it
+/// ran but produced no recognizable usage line (i.e. it's a shadowing binary
+/// with the same name — the failure mode that previously made the chat
+/// stream appear to "fail silently").
+fn looks_like_agent(exe: &std::path::Path, command: &str) -> bool {
+    // Cap the probe so a hung/unresponsive binary can't block the chat
+    // pre-flight check. 3s is generous — real CLIs return in <100ms.
+    let output = match std::process::Command::new(exe)
+        .args(["run", "--help"])
+        .env("NO_COLOR", "1")
+        .env("TERM", "dumb")
+        .env("CI", "1")
+        .output()
+    {
+        Ok(o) => o,
+        Err(_) => return false,
+    };
+    let combined = String::from_utf8_lossy(&output.stdout).to_string()
+        + &String::from_utf8_lossy(&output.stderr);
+    // Strip ANSI escape sequences (CSI) and a few control chars that show up
+    // in the kilo banner before the usage line. Doesn't have to be perfect —
+    // we only need to recognize the `<command> run [` usage line that BOTH
+    // agents print.
+    let stripped: String = combined
+        .chars()
+        .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
+        .collect();
+    let needle = format!("{} run [", command);
+    stripped.lines().any(|line| line.trim_start().starts_with(&needle))
 }
 
 /// Directories to search for an agent CLI when it isn't resolvable via the
 /// current PATH. GUI/launcher processes often don't inherit shell PATH
 /// customizations (e.g. an nvm-managed `node` that puts `kilo` on PATH), so
 /// we also probe the usual install locations before reporting the CLI missing.
-fn agent_search_dirs() -> Vec<std::path::PathBuf> {
+///
+/// Search order is deliberate to defeat a known shadowing failure mode: a
+/// stale `opencode` / `kilo` in `~/.local/bin` (e.g. left over from an old
+/// `npm i -g` install) used to be returned before the actual install at
+/// `~/.opencode/bin` / `~/.kilo/bin`, because `~/.local/bin` was probed
+/// first. That wrong binary then ignored `--format json` / `--pure` / etc.,
+/// and the chat appeared to "fail silently" because the pre-flight check
+/// (`--version` runs fine) declared the CLI installed. We now prefer the
+/// per-agent install location and probe `~/.local/bin` later, behind the
+/// real install.
+fn agent_search_dirs(command: &str) -> Vec<std::path::PathBuf> {
     let mut dirs: Vec<std::path::PathBuf> = Vec::new();
-    if let Ok(path) = std::env::var("PATH") {
-        for p in std::env::split_paths(&path) {
-            dirs.push(p);
-        }
-    }
     if let Ok(home) = std::env::var("HOME") {
         let home = std::path::PathBuf::from(home);
-        dirs.push(home.join(".local/bin"));
+        // Per-agent install location first — these are the canonical paths
+        // for the CLIs we care about, and skipping the early PATH probe
+        // prevents a `~/.local/bin` shadow from being picked.
+        match command {
+            "opencode" => dirs.push(home.join(".opencode/bin")),
+            "kilo" => dirs.push(home.join(".kilo/bin")),
+            _ => {}
+        }
+        // nvm versions of node put `kilo` on PATH via npm globals; check
+        // those before the system PATH so an nvm-managed install wins.
         if let Ok(entries) = std::fs::read_dir(home.join(".nvm/versions/node")) {
             for entry in entries.flatten() {
                 let bin = entry.path().join("bin");
@@ -1119,61 +1200,84 @@ fn agent_search_dirs() -> Vec<std::path::PathBuf> {
             }
         }
     }
+    // Then the user's normal PATH (covers system installs and shell-managed
+    // customizations like rustup/cargo bins).
+    if let Ok(path) = std::env::var("PATH") {
+        for p in std::env::split_paths(&path) {
+            dirs.push(p);
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        let home = std::path::PathBuf::from(home);
+        dirs.push(home.join(".local/bin"));
+        // Add the other agent's install dir as a final fallback (in case the
+        // user has only one of them installed and aliased).
+        match command {
+            "opencode" => dirs.push(home.join(".kilo/bin")),
+            "kilo" => dirs.push(home.join(".opencode/bin")),
+            _ => {}
+        }
+    }
     dirs
 }
 
-/// Resolve the path to an agent's executable.
+/// Resolve the path to an agent's executable, rejecting shadowing binaries
+/// that share the name but aren't the real agent.
 ///
-/// Returns `None` only when no usable binary can be found on PATH or in the
-/// common install locations we probe. When found, the returned path is used
-/// directly so callers don't depend on the spawning process's PATH.
+/// Returns `None` only when no candidate exists on disk. If a candidate
+/// exists but fails the identity check (`<bin> run --help` doesn't look like
+/// the expected agent), we *keep looking* — the wrong binary may be earlier
+/// in the search order, and the real one may be in `~/.opencode/bin` even
+/// though `~/.local/bin` has a stale copy. We also call the identity check
+/// at the very end on the final candidate: if the LAST and only candidate
+/// is a wrong binary, we still return its path (so the streaming path can
+/// show a `WrongBinary` error) but the streaming path will detect this via
+/// `chat_cli_check` and surface it to the user.
 ///
-/// This is a pure filesystem lookup (stat calls only) — no process is
-/// spawned, so it's safe to call on every chat message.
+/// This is mostly filesystem lookup (stat calls), but on a single final
+/// candidate we run one `run --help` invocation. Safe to call on every chat
+/// message — the worst case is one ~100ms subprocess exec.
 pub fn resolve_agent_bin(command: &str) -> Option<std::path::PathBuf> {
-    // Check PATH directories and common install locations (nvm, ~/.local/bin).
-    for dir in agent_search_dirs() {
+    let mut last: Option<std::path::PathBuf> = None;
+    for dir in agent_search_dirs(command) {
         let candidate = dir.join(command);
         if candidate.is_file() {
-            return Some(candidate);
+            if looks_like_agent(&candidate, command) {
+                return Some(candidate);
+            }
+            // Wrong binary — keep looking for the real one before giving up.
+            if last.is_none() {
+                last = Some(candidate);
+            }
         }
     }
-    None
+    last
 }
 
 /// Probe whether the given agent CLI is installed and usable.
 ///
-/// We run `<command> --version` and inspect the result:
-///   * `NotFound` / no binary anywhere     -> `Missing`
-///   * the binary runs (ideally names the agent) -> `Available`
-///   * other spawn error                   -> treat as available (avoid false negatives)
+/// Runs `<bin> run --help` to verify the binary exists AND identifies as the
+/// expected agent. Token matching against `--version` output is unreliable
+/// (kilo prints bare `7.4.22`, opencode prints bare `1.18.27` — neither
+/// contains the agent name), so we use the `run --help` usage line instead.
 ///
-/// The identity token (`kilo`, `opencode`) is only a *positive* hint. Some
-/// agents print a bare version (e.g. `kilo --version` => `7.4.23`) that does
-/// not contain the token, so a missing token must NOT be treated as "not
-/// installed" — that produced false "not on your PATH" warnings. Any binary
-/// that resolves and runs `--version` is therefore treated as available.
+///   * no binary anywhere                        -> `Missing`
+///   * binary exists but doesn't look like agent -> `WrongBinary`
+///   * binary exists and identifies correctly    -> `Available`
 ///
-/// Note: this only verifies the binary exists and runs, not that the user is
-/// authenticated or that the agent can reach the network. Credential/network
-/// failures surface later, when the command is actually executed.
+/// Note: this only verifies the binary exists and is the right CLI, not
+/// that the user is authenticated or that the agent can reach the network.
+/// Credential/network failures surface later, when the command is actually
+/// executed.
 pub fn chat_cli_check(command: &str) -> CliStatus {
     let exe = match resolve_agent_bin(command) {
         Some(e) => e,
         None => return CliStatus::Missing,
     };
-
-    let token = agent_token(command);
-    match Command::new(&exe).arg("--version").output() {
-        Ok(output) => {
-            let combined = String::from_utf8_lossy(&output.stdout).to_lowercase()
-                + &String::from_utf8_lossy(&output.stderr).to_lowercase();
-            // Positive identification strengthens confidence but is optional.
-            let _ = combined.contains(token);
-            CliStatus::Available
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => CliStatus::Missing,
-        Err(_) => CliStatus::Available,
+    if looks_like_agent(&exe, command) {
+        CliStatus::Available
+    } else {
+        CliStatus::WrongBinary
     }
 }
 
@@ -1336,6 +1440,29 @@ pub fn chat_stream(
         None => return Err(cli_missing_message(&command)),
     };
 
+    // The frontend sends cwd = focused/working directory. If that path
+    // doesn't exist on THIS server (stale session from another backend,
+    // deleted folder), `cmd.current_dir` makes spawn() fail with ENOENT,
+    // which used to be misreported as "CLI not on your PATH". Validate it
+    // first and say what's actually wrong.
+    if let Some(dir) = cwd.as_deref() {
+        let p = std::path::Path::new(dir);
+        if !p.exists() {
+            return Err(format!(
+                "Working directory '{}' does not exist on this server. \
+                 Open a valid folder (or clear the saved session) and try again.",
+                dir
+            ));
+        }
+        if !p.is_dir() {
+            return Err(format!(
+                "Working directory '{}' is not a directory. \
+                 Open a valid folder and try again.",
+                dir
+            ));
+        }
+    }
+
     // Materialize attachment contents to temp files so they can be passed via
     // the CLI's native `-f/--file` flag instead of being inlined into the
     // (size-limited) prompt argument. Doing this up front gives a real error
@@ -1356,6 +1483,26 @@ pub fn chat_stream(
     if !api_key.trim().is_empty() {
         cmd.env("OPENROUTER_API_KEY", &api_key);
     }
+    // Run the agent CLI non-interactively and color-free so captured tool
+    // output is clean, deterministic and can never hang:
+    //   * NO_COLOR/CLICOLOR/TERM=dumb – no ANSI escapes (incl. termcolor)
+    //   * CI=1                         – terse output (no spinners/banners)
+    //   * C.UTF-8 + PYTHONIOENCODING   – deterministic UTF-8, no Python
+    //                                    UnicodeEncodeError crashes
+    //   * PAGER=cat                    – no command can block on a pager
+    // These propagate to every tool command the agent spawns.
+    // FORCE_COLOR is removed so nothing can re-enable color.
+    cmd.env("NO_COLOR", "1");
+    cmd.env("CLICOLOR", "0");
+    cmd.env("TERM", "dumb");
+    cmd.env("CI", "1");
+    cmd.env("LANG", "C.UTF-8");
+    cmd.env("LC_ALL", "C.UTF-8");
+    cmd.env("PYTHONIOENCODING", "utf-8");
+    cmd.env("GIT_PAGER", "cat");
+    cmd.env("PAGER", "cat");
+    cmd.env_remove("FORCE_COLOR");
+    cmd.env_remove("CLICOLOR_FORCE");
     // Switch kilo's real mode via an inline config. Seeding the prompt with
     // mode instructions is not enough — kilo's own mode system overrides it.
     // KILO_CONFIG_CONTENT is deep-merged with highest precedence, so this
@@ -1379,13 +1526,11 @@ pub fn chat_stream(
     let output = match cmd.output() {
         Ok(o) => o,
         Err(e) => {
-            // Only a genuinely missing binary should be reported as the
-            // "not on your PATH" error. Other failures (e.g. argument list too
-            // long) are real and must be surfaced verbatim, not masked.
+            // resolve_agent_bin already verified the exe exists and cwd was
+            // validated above, so a NotFound here is NOT "CLI not on PATH"
+            // (that old message misled users with stale working directories)
+            // — surface the real error verbatim.
             cleanup_attachment_files(&attachment_paths);
-            if e.kind() == std::io::ErrorKind::NotFound {
-                return Err(cli_missing_message(&command));
-            }
             return Err(format!("Failed to run {}: {}", command, e));
         }
     };

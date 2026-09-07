@@ -1,6 +1,6 @@
 # noide-server
 
-The self-hosted server for **NoIDE** — a lightweight code editor and
+The self-hosted backend for **NoIDE** — a browser/mobile code editor and
 terminal. It is a single native binary that serves PTY terminals, file
 operations, git, and AI coding agents (kilo/opencode) over one WebSocket
 connection.
@@ -30,6 +30,7 @@ Supported platforms:
 |----|--------------|-------|
 | Linux | x86_64, aarch64 | aarch64 targets Raspberry Pi / ARM servers |
 | macOS | x86_64 (Intel), aarch64 (Apple Silicon) | see [macOS note](#macos-note) |
+| Windows | x86_64 | see [Windows note](#windows-note) |
 
 ### Requirements
 
@@ -42,8 +43,8 @@ Supported platforms:
 - **`git` is required** for the app's Source Control features — the server
   shells out to the `git` binary on the host. Install it if your system
   doesn't already have it.
-- Terminal tabs run your host's login shell — present on every Linux/macOS
-  system.
+- Terminal tabs run your host's login shell — zsh/bash on Linux/macOS and
+  PowerShell on Windows.
 
 ### Recommended: install script
 
@@ -98,9 +99,18 @@ Notes:
   machine wakes (`noide-server` again; it prints a fresh pairing code).
 - Re-run the install command any time to upgrade to the latest release.
 
+### Termux (Android)
+
+`noide-server` is a native binary and runs on aarch64 devices — Termux works.
+For better performance with the Chat AI agents, run it inside an
+[AndroNix](https://andronix.app) proot (Ubuntu CLI only) instead (a full Linux distro with a
+real glibc + Node.js toolchain); avoid third-party "Proot Distro" installers,
+which are slower and less reliable.
+
 ### Manual install
 
-Download `noide-server-<os>-<arch>` from the [releases](https://github.com/n-o-ide/noide-server/releases)
+Download `noide-server-<os>-<arch>` (`noide-server-windows-x86_64.exe` on
+Windows) from the [releases](https://github.com/n-o-ide/noide-server/releases)
 page and verify it against the published `SHA256SUMS`:
 
 ```bash
@@ -121,13 +131,22 @@ verified", remove the quarantine attribute once:
 xattr -d com.apple.quarantine "$(command -v noide-server)"
 ```
 
-### Termux (Android)
+<a name="windows-note"></a>
+**Windows note:** the release binary is `noide-server-windows-x86_64.exe`.
+Binaries are unsigned, so SmartScreen may warn "Windows protected your PC" —
+click **More info → Run anyway**, or launch it from PowerShell and verify it
+against the published `SHA256SUMS`:
 
-`noide-server` is a native binary and runs on aarch64 devices — Termux works.
-For better performance with the Chat AI agents, run it inside an
-[AndroNix](https://andronix.app) proot instead (a full Linux distro with a
-real glibc + Node.js toolchain); avoid third-party "Proot Distro" installers,
-which are slower and less reliable.
+```powershell
+curl.exe -fLO https://github.com/n-o-ide/noide-server/releases/latest/download/noide-server-windows-x86_64.exe
+curl.exe -fLO https://github.com/n-o-ide/noide-server/releases/latest/download/SHA256SUMS
+certutil -hashfile noide-server-windows-x86_64.exe SHA256   # compare with SHA256SUMS
+.\noide-server-windows-x86_64.exe --version
+```
+
+Terminal tabs default to PowerShell on Windows. **git** is required for
+Source Control — install [Git for Windows](https://git-scm.com/download/win)
+if it isn't already on your PATH.
 
 ---
 
@@ -318,7 +337,8 @@ Requires a Rust toolchain. Release builds use LTO + stripping (`opt-level=s`,
 ## Protocol compatibility
 
 The WebSocket contract between this server and the NoIDE app is documented in
-[PROTOCOL.md](PROTOCOL.md). The server and app can be on different versions; breaking protocol changes are
+[PROTOCOL.md](../PROTOCOL.md) (copy it into this repo when splitting out). The
+server and app can be on different versions; breaking protocol changes are
 called out in the release notes.
 
 ---

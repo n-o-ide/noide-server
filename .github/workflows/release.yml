@@ -11,6 +11,11 @@ jobs:
   build:
     name: build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    # Packaging steps below use bash conditionals; windows-latest defaults to
+    # PowerShell but ships Git Bash, so pin bash for the whole job.
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
@@ -27,6 +32,10 @@ jobs:
             target: darwin-aarch64
           - os: macos-15
             target: darwin-x86_64
+          # windows-latest is x64 natively, so this builds straight out of
+          # the box with the MSVC toolchain (no extra target needed).
+          - os: windows-latest
+            target: windows-x86_64
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -41,19 +50,25 @@ jobs:
           fi
       - name: Package binary
         run: |
+          EXT=""
           BIN="target/release/noide-server"
           if [ "${{ matrix.target }}" = "darwin-x86_64" ]; then
             BIN="target/x86_64-apple-darwin/release/noide-server"
+          elif [ "${{ matrix.target }}" = "windows-x86_64" ]; then
+            BIN="target/release/noide-server.exe"
+            EXT=".exe"
           fi
-          cp "$BIN" "noide-server-${{ matrix.target }}"
-          chmod +x "noide-server-${{ matrix.target }}"
+          cp "$BIN" "noide-server-${{ matrix.target }}$EXT"
+          chmod +x "noide-server-${{ matrix.target }}$EXT"
+      # Windows artifacts are not smoke-tested: scripts/smoke-test.mjs
+      # exercises the unix pairing/QR flow and the runner is Linux-only here.
       - name: Smoke test the actual artifact
         if: runner.os == 'Linux'
         run: node scripts/smoke-test.mjs "./noide-server-${{ matrix.target }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
-          path: noide-server-${{ matrix.target }}
+          path: noide-server-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
           if-no-files-found: error
 
   checksums:
@@ -85,13 +100,14 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Verify all 4 binaries present
+      - name: Verify all 5 binaries present
         working-directory: dist
         run: |
           test -f SHA256SUMS
           for t in linux-x86_64 linux-aarch64 darwin-x86_64 darwin-aarch64; do
             test -f "noide-server-$t" || { echo "missing noide-server-$t" >&2; exit 1; }
           done
+          test -f "noide-server-windows-x86_64.exe" || { echo "missing noide-server-windows-x86_64.exe" >&2; exit 1; }
       # Curated notes come from RELEASE_BODY.md at the tag's commit (edit that
       # file before tagging); the automatically generated "What's Changed"
       # section is appended below it.

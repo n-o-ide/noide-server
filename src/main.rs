@@ -1,4 +1,5 @@
 mod agent_servers;
+mod cloudflare;
 mod commands;
 mod pairing;
 mod pty;
@@ -6,7 +7,6 @@ mod ws_server;
 
 use crate::agent_servers::AgentServerManager;
 use std::sync::{Arc, Mutex};
-use tokio::sync::broadcast;
 
 fn main() {
     let addr = std::env::var("NOTERM_WS_ADDR").unwrap_or_else(|_| "0.0.0.0:1421".to_string());
@@ -28,11 +28,14 @@ fn main() {
                 "OPTIONS:\n",
                 "    --token <value>    Require this fixed token (or NOIDE_TOKEN env)\n",
                 "    --no-auth          Accept unauthenticated connections (dev only)\n",
+                "    --no-cloudflare    Disable automatic Cloudflare tunnel\n",
                 "    --version, -V      Print version and exit\n",
                 "    --help, -h         Print this help\n\n",
                 "ENVIRONMENT:\n",
-                "    NOTERM_WS_ADDR     Bind address and port (default 0.0.0.0:1421)\n",
-                "    NOIDE_TOKEN        Fixed token (same as --token)\n",
+                "    NOTERM_WS_ADDR      Bind address and port (default 0.0.0.0:1421)\n",
+                "    NOIDE_TOKEN         Fixed token (same as --token)\n",
+                "    NOIDE_PTY_KEEP_ALIVE  Seconds an unattached terminal session is kept\n",
+                "                          before reaping (default 1800)\n",
             )
         );
         return;
@@ -48,6 +51,7 @@ fn main() {
         .ok()
         .filter(|t| !t.trim().is_empty());
     let mut no_auth = false;
+    let mut no_cloudflare = false;
     {
         let args: Vec<String> = std::env::args().skip(1).collect();
         let mut i = 0;
@@ -63,6 +67,7 @@ fn main() {
                     }
                 }
                 "--no-auth" => no_auth = true,
+                "--no-cloudflare" => no_cloudflare = true,
                 _ => {}
             }
             if let Some(v) = args[i].strip_prefix("--token=") {
@@ -96,8 +101,7 @@ fn main() {
         .expect("failed to build tokio runtime");
 
     rt.block_on(async move {
-        let (tx, _rx) = broadcast::channel::<pty::PtyEvent>(1024);
-        let manager = Arc::new(Mutex::new(pty::PtyManager::new(tx.clone())));
+        let manager = Arc::new(Mutex::new(pty::PtyManager::new()));
         let chat_tracker = Arc::new(ws_server::ChatProcessTracker::new());
         // One long-lived `<agent> serve` per agent, reused across chat messages.
         let agent_servers = Arc::new(AgentServerManager::new(chat_tracker.clone()));
@@ -128,9 +132,41 @@ fn main() {
         })
         .ok();
 
-        if let Err(e) =
-            ws_server::start(manager, tx, &addr, chat_tracker, agent_servers, token).await
-        {
+        // --- Cloudflare Quick Tunnel (trycloudflare.com) ---
+        // Spawn in the background so the server starts immediately.
+        // The tunnel prints its public URL once ready.
+        // Skip when --no-cloudflare is passed.
+        if !no_cloudflare {
+            let port: u16 = addr
+                .rsplit(':')
+                .next()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(1421);
+            tokio::spawn(async move {
+                match cloudflare::start_tunnel(port).await {
+                    Ok((url, mut child)) => {
+                        eprintln!();
+                        eprintln!("=====================================================");
+                        eprintln!("  Cloudflare Quick Tunnel active");
+                        eprintln!();
+                        eprintln!("  {}", url);
+                        eprintln!();
+                        eprintln!("  Open this URL in any browser to use NoIDE remotely.");
+                        eprintln!("  The tunnel stays alive as long as this server runs.");
+                        eprintln!("=====================================================");
+                        eprintln!();
+                        // Wait for the child to exit (i.e. server shutdown).
+                        let _ = child.wait().await;
+                    }
+                    Err(e) => {
+                        eprintln!("[NoIDE] Cloudflare tunnel unavailable: {e}");
+                        eprintln!("[NoIDE] The server is still reachable on the local network.");
+                    }
+                }
+            });
+        }
+
+        if let Err(e) = ws_server::start(manager, &addr, chat_tracker, agent_servers, token).await {
             eprintln!("[NoIDE] server error: {}", e);
             std::process::exit(1);
         }

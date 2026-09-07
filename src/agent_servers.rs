@@ -101,7 +101,28 @@ impl AgentServerManager {
         if !api_key.trim().is_empty() {
             cmd.env("OPENROUTER_API_KEY", api_key);
         }
-        cmd.env("TERM", "xterm-256color");
+        // Run the agent server non-interactively and color-free so captured
+        // tool output is clean, deterministic and can never hang:
+        //   * NO_COLOR/CLICOLOR/TERM=dumb – no ANSI escapes (incl. termcolor)
+        //   * CI=1                        – terse output (no spinners/banners)
+        //   * C.UTF-8 + PYTHONIOENCODING   – deterministic UTF-8, no Python
+        //                                    UnicodeEncodeError crashes
+        //   * PAGER=cat                    – an agent command can never block
+        //                                    on an interactive pager
+        // The `serve` process executes the agent's tools, so these propagate
+        // to every command it spawns. FORCE_COLOR is removed so nothing can
+        // re-enable color.
+        cmd.env("NO_COLOR", "1");
+        cmd.env("CLICOLOR", "0");
+        cmd.env("TERM", "dumb");
+        cmd.env("CI", "1");
+        cmd.env("LANG", "C.UTF-8");
+        cmd.env("LC_ALL", "C.UTF-8");
+        cmd.env("PYTHONIOENCODING", "utf-8");
+        cmd.env("GIT_PAGER", "cat");
+        cmd.env("PAGER", "cat");
+        cmd.env_remove("FORCE_COLOR");
+        cmd.env_remove("CLICOLOR_FORCE");
 
         let mut child = cmd
             .spawn()
