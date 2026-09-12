@@ -1,6 +1,7 @@
 [package]
 name = "port-forward"
 description = "Expose local ports via trycloudflare, localhost.run, or localtunnel"
+version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
