@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Port Forwarding</title>
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --bg-hover: #30363d;
+      --bg-active: #1f6feb22;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #484f58;
+      --border-primary: #30363d;
+      --border-secondary: #21262d;
+      --accent-primary: #58a6ff;
+      --accent-secondary: #1f6feb;
+      --accent-success: #3fb950;
+      --accent-warning: #d29922;
+      --accent-danger: #f85149;
+      --accent-info: #58a6ff;
+      --text-on-accent: #fff;
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+      --font-sans: 'Google Sans Code', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'Roboto Mono', 'Space Mono', monospace;
+      --ui-font-size: 13px;
+      --font-size-xs: calc(var(--ui-font-size) * 0.846);
+      --font-size-sm: calc(var(--ui-font-size) * 0.923);
+      --font-size-md: calc(var(--ui-font-size) * 1.077);
+      --font-size-lg: calc(var(--ui-font-size) * 1.231);
+
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 12px;
+      --spacing-lg: 16px;
+      --spacing-xl: 24px;
+
+      --transition-fast: 100ms ease;
+      --transition-normal: 200ms ease;
+      --transition-slow: 300ms ease;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: var(--ui-font-size);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .pf-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-primary);
+      background: var(--bg-secondary);
+    }
+
+    .pf-header-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-md);
+      background: var(--accent-primary);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .pf-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .pf-title {
+      font-size: var(--font-size-md);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .pf-subtitle {
+      font-size: var(--font-size-xs);
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .pf-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--spacing-lg);
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-md);
+    }
+
+    .pf-field {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-xs);
+    }
+
+    .pf-label {
+      font-size: var(--font-size-xs);
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .pf-select,
+    .pf-input {
+      width: 100%;
+      padding: var(--spacing-xs) var(--spacing-sm);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: var(--font-size-md);
+      font-family: var(--font-sans);
+      outline: none;
+      transition: border-color var(--transition-fast);
+    }
+
+    .pf-select:focus,
+    .pf-input:focus {
+      border-color: var(--accent-primary);
+    }
+
+    .pf-select:disabled,
+    .pf-input:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .pf-actions {
+      display: flex;
+      gap: var(--spacing-sm);
+    }
+
+    .pf-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: var(--spacing-xs) var(--spacing-md);
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: var(--font-size-sm);
+      font-family: var(--font-sans);
+      cursor: pointer;
+      flex: 1;
+      transition: all var(--transition-fast);
+    }
+
+    .pf-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .pf-btn-primary {
+      background: var(--accent-secondary);
+      border: 1px solid var(--accent-secondary);
+      color: var(--text-on-accent);
+    }
+
+    .pf-btn-primary:hover:not(:disabled) {
+      background: var(--accent-primary);
+      border-color: var(--accent-primary);
+    }
+
+    .pf-btn-danger {
+      background: var(--accent-danger);
+      border: 1px solid var(--accent-danger);
+      color: var(--text-on-accent);
+    }
+
+    .pf-url-box {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-xs);
+    }
+
+    .pf-url-row {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+    }
+
+    .pf-url {
+      flex: 1;
+      padding: var(--spacing-xs) var(--spacing-sm);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--radius-md);
+      color: var(--accent-primary);
+      font-size: var(--font-size-md);
+      font-family: var(--font-mono);
+      word-break: break-all;
+    }
+
+    .pf-btn-copy {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all var(--transition-fast);
+    }
+
+    .pf-btn-copy:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .pf-logs {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      max-height: 180px;
+      overflow-y: auto;
+      padding: var(--spacing-sm);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--radius-md);
+    }
+
+    .pf-log {
+      font-size: var(--font-size-xs);
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      padding: 2px 0;
+    }
+
+    .pf-error {
+      padding: var(--spacing-sm) var(--spacing-md);
+      background: rgba(248, 81, 73, 0.12);
+      border: 1px solid var(--accent-danger);
+      border-radius: var(--radius-md);
+      color: var(--accent-danger);
+      font-size: var(--font-size-sm);
+    }
+
+    .pf-install-prompt {
+      padding: var(--spacing-md);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-sm);
+    }
+
+    .pf-install-text {
+      font-size: var(--font-size-sm);
+      color: var(--text-primary);
+    }
+
+    .pf-install-actions {
+      display: flex;
+      gap: var(--spacing-sm);
+      justify-content: flex-end;
+    }
+</head>
+<body>
+  <div class="pf-header">
+    <div class="pf-header-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    </div>
+    <div>
+      <div class="pf-title">Port Forwarding</div>
+      <div class="pf-subtitle">Expose a local port to the internet</div>
+    </div>
+  </div>
+
+  <div class="pf-body">
+    <div class="pf-field">
+      <label class="pf-label">Provider</label>
+      <select id="provider" class="pf-select">
+        <option value="trycloudflare">trycloudflare (cloudflared)</option>
+        <option value="localhost.run">localhost.run (ssh)</option>
+        <option value="localtunnel">localtunnel (lt)</option>
+      </select>
+    </div>
+
+    <div class="pf-field">
+      <label class="pf-label">Local Port</label>
+      <input id="port" type="number" class="pf-input" value="3000" min="1" max="65535" />
+    </div>
+
+    <div class="pf-actions">
+      <button id="startBtn" class="pf-btn pf-btn-primary">Start Forwarding</button>
+      <button id="stopBtn" class="pf-btn pf-btn-danger" style="display:none;">Stop</button>
+    </div>
+
+    <div id="urlBox" class="pf-url-box" style="display:none;">
+      <label class="pf-label">Public URL</label>
+      <div class="pf-url-row">
+        <code id="publicUrl" class="pf-url"></code>
+        <button id="copyBtn" class="pf-btn-copy">Copy</button>
+      </div>
+    </div>
+
+    <div id="logs" class="pf-logs" style="display:none;"></div>
+
+    <div id="error" class="pf-error" style="display:none;"></div>
+
+    <div id="installPrompt" class="pf-install-prompt" style="display:none;">
+      <p id="installText" class="pf-install-text"></p>
+      <div class="pf-install-actions">
+        <button id="dismissInstall" class="pf-btn pf-btn-primary" style="background:transparent;color:var(--text-primary);border:1px solid var(--border-primary);">Dismiss</button>
+        <button id="installBtn" class="pf-btn pf-btn-primary">Install</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const providerEl = document.getElementById('provider');
+    const portEl = document.getElementById('port');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const urlBox = document.getElementById('urlBox');
+    const publicUrlEl = document.getElementById('publicUrl');
+    const copyBtn = document.getElementById('copyBtn');
+    const logsEl = document.getElementById('logs');
+    const errorEl = document.getElementById('error');
+    const installPrompt = document.getElementById('installPrompt');
+    const installText = document.getElementById('installText');
+    const installBtn = document.getElementById('installBtn');
+    const dismissInstall = document.getElementById('dismissInstall');
+
+    let currentProvider = providerEl.value;
+    let currentPort = parseInt(portEl.value, 10) || 3000;
+    let eventSource = null;
+
+    function addLog(line) {
+      const div = document.createElement('div');
+      div.className = 'pf-log';
+      div.textContent = line;
+      logsEl.appendChild(div);
+      logsEl.scrollTop = logsEl.scrollHeight;
+      logsEl.style.display = 'flex';
+    }
+
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.style.display = 'block';
+    }
+
+    function hideError() {
+      errorEl.style.display = 'none';
+    }
+
+    function showInstallPrompt(msg) {
+      installText.textContent = msg;
+      installPrompt.style.display = 'flex';
+    }
+
+    function hideInstallPrompt() {
+      installPrompt.style.display = 'none';
+    }
+
+    function setRunning(running) {
+      startBtn.style.display = running ? 'none' : 'inline-flex';
+      stopBtn.style.display = running ? 'inline-flex' : 'none';
+      providerEl.disabled = running;
+      portEl.disabled = running;
+    }
+
+    async function startForward() {
+      hideError();
+      hideInstallPrompt();
+      publicUrlEl.textContent = '';
+      urlBox.style.display = 'none';
+      logsEl.innerHTML = '';
+      logsEl.style.display = 'none';
+
+      currentProvider = providerEl.value;
+      currentPort = parseInt(portEl.value, 10) || 3000;
+
+      setRunning(true);
+
+      eventSource = new EventSource(`/api/forward?provider=${encodeURIComponent(currentProvider)}&port=${currentPort}`);
+
+      eventSource.addEventListener('log', (e) => {
+        addLog(e.data);
+      });
+
+      eventSource.addEventListener('url', (e) => {
+        publicUrlEl.textContent = e.data;
+        urlBox.style.display = 'flex';
+        setRunning(false);
+        eventSource.close();
+      });
+
+      eventSource.addEventListener('error', (e) => {
+        const msg = e.data || 'Port forwarding error';
+        showError(msg);
+        setRunning(false);
+        eventSource.close();
+        if (msg.toLowerCase().includes('not installed')) {
+          if (currentProvider === 'trycloudflare') {
+            showInstallPrompt('cloudflared is required for trycloudflare. Install it to use this provider.');
+          } else if (currentProvider === 'localhost.run') {
+            showInstallPrompt('OpenSSH client (ssh) is required for localhost.run. Install it via your package manager.');
+          } else {
+            showInstallPrompt('localtunnel (lt) is required. Install it with: npm install -g localtunnel');
+          }
+        }
+      });
+
+      eventSource.onerror = () => {
+        setRunning(false);
+      };
+    }
+
+    async function stopForward() {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      await fetch(`/api/stop?provider=${encodeURIComponent(currentProvider)}&port=${currentPort}`, { method: 'POST' });
+      setRunning(false);
+    }
+
+    async function installTool() {
+      installBtn.disabled = true;
+      installBtn.textContent = 'Installing...';
+      try {
+        const res = await fetch(`/api/install?provider=${encodeURIComponent(currentProvider)}`, { method: 'POST' });
+        const data = await res.json();
+        if (data.installed) {
+          hideInstallPrompt();
+          addLog(`Installed ${currentProvider}. Try starting the forward again.`);
+        } else {
+          showError(data.error || 'Installation failed');
+        }
+      } catch (e) {
+        showError('Installation request failed');
+      } finally {
+        installBtn.disabled = false;
+        installBtn.textContent = 'Install';
+      }
+    }
+
+    async function copyUrl() {
+      try {
+        await navigator.clipboard.writeText(publicUrlEl.textContent);
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+      } catch {
+        // ignore
+      }
+    }
+
+    startBtn.addEventListener('click', startForward);
+    stopBtn.addEventListener('click', stopForward);
+    copyBtn.addEventListener('click', copyUrl);
+    installBtn.addEventListener('click', installTool);
+    dismissInstall.addEventListener('click', hideInstallPrompt);
+  </script>
+</body>
+</html>
