@@ -219,7 +219,7 @@ pub async fn run_tunnel_owned(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
-    let mut child = cmd
+    let child = cmd
         .spawn()
         .map_err(|e| format!("Failed to start {}: {}", bin_name, e))?;
 
