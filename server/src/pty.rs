@@ -339,10 +339,23 @@ impl PtyManager {
                 .writer
                 .write_all(data.as_bytes())
                 .map_err(|e| format!("Write error: {}", e))?;
+            // No explicit flush — the OS pty buffer handles batching.
+            // Flushing after every small write forces a syscall per keystroke
+            // with no benefit (the pty master is not a regular file).
+            Ok(())
+        } else {
+            Err(format!("Session {} not found", session_id))
+        }
+    }
+
+    /// Write raw bytes directly to a session's pty (binary fast path).
+    /// Skips the UTF-8 → str conversion that `write()` requires.
+    pub fn write_binary(&mut self, session_id: &str, data: &[u8]) -> Result<(), String> {
+        if let Some(session) = self.sessions.get_mut(session_id) {
             session
                 .writer
-                .flush()
-                .map_err(|e| format!("Flush error: {}", e))?;
+                .write_all(data)
+                .map_err(|e| format!("Write error: {}", e))?;
             Ok(())
         } else {
             Err(format!("Session {} not found", session_id))

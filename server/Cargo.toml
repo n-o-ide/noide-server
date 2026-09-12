@@ -1,8 +1,9 @@
 [package]
 name = "noide-server"
+version = "0.1.0"
 description = "Self-hosted WebSocket backend for NoIDE (PTY, git, file ops, agent chat)"
-authors.workspace = true
-edition.workspace = true
+authors = ["you"]
+edition = "2021"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -19,7 +20,18 @@ rand = "0.8"
 qrcode = "0.14"
 regex = "1.13.1"
 zip = "0.6"
+# PTY output gzip compression (flate2 is already in the tree via zip).
 flate2 = "1"
 
+# Windows-only: terminating a process by PID (chat CLI cleanup on shutdown).
+# The `libc` crate does not expose Win32 process APIs, so we use windows-sys
+# (already in the tree via mio/ctrlc) with just the two modules we need.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

@@ -107,7 +107,7 @@ fn ensure_cloudflared(dest: &std::path::Path) -> Result<std::path::PathBuf, Stri
             .map_err(|e| format!("failed to write binary: {e}"))?;
     }
 
-    let _ = std::fs::rename(&tmp, dest).map_err(|e| format!("failed to install cloudflared: {e}"));
+    std::fs::rename(&tmp, dest).map_err(|e| format!("failed to install cloudflared: {e}"))?;
 
     // Make executable on Unix.
     #[cfg(unix)]
