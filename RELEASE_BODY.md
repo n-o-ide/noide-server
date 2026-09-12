@@ -1,11 +1,22 @@
-## v0.2.2 — Windows, Cloudflare Quick Tunnel, and stability
+## v0.3.0 — Port Forwarding, Binary PTY, and Graceful Shutdown
 
-Adds Windows support and a one-shot Cloudflare tunnel, widens file-tree/search
-ignore lists for bigger workspaces, and includes a round of stability fixes
-around PTY teardown, WebSocket keep-alive, and agent lifecycle.
+Adds a built-in port-forwarding subsystem with Cloudflare/localhost.run/localtunnel
+support, a binary PTY fast path for lower-latency keystrokes, and a graceful
+shutdown that tears down runtimes cleanly instead of panicking. Also includes
+Windows support, a Cloudflare Quick Tunnel, and a round of stability fixes.
 
 ### Highlights
 
+- **Port Forwarding.** A new `port-forward` binary ships alongside `noide-server`.
+  Expose local ports via Cloudflare Quick Tunnel, localhost.run, or localtunnel —
+  managed from the NoIDE app's Ports panel or used standalone from the CLI.
+  Install with `bash install.sh --port-forward` or `bash install.sh --all`.
+- **Binary PTY fast path.** Terminal keystrokes can now be sent as raw binary
+  frames (type `0x01`) instead of JSON, skipping UTF-8 validation and reducing
+  frame overhead for interactive use.
+- **Graceful shutdown.** Ctrl+C now signals the async runtime to shut down
+  cleanly instead of calling `process::exit` from a signal handler, preventing
+  "Cannot drop a runtime in a context where blocking is not allowed" panics.
 - **Windows support.** Release builds now produce
   `noide-server-windows-x86_64.exe`; terminal tabs default to PowerShell and
   `git` is required for Source Control (install [Git for Windows](https://git-scm.com/download/win) if it is missing).
@@ -13,24 +24,15 @@ around PTY teardown, WebSocket keep-alive, and agent lifecycle.
   `cloudflared` into `~/.noide` (or `%LOCALAPPDATA%\noide` on Windows) and
   starts a `trycloudflare.com` tunnel, printing a public `wss://`-friendly URL
   to stderr. Drop `--no-cloudflare` if you bring your own reverse proxy.
-- **File tree / search ignore lists widened.** More project noise is skipped by
-  default (intermediate build/output folders for common stacks), so large repos
-  browse and search more cleanly.
-- **Chat agent detection is stricter.** `chat_check_install` now distinguishes
-  "missing" from "wrong binary on PATH", and streaming startup surfaces a
-  clear error instead of proceeding silently when a shadowed CLI doesn't match
-  the requested agent.
-- **Cleaner PTY shutdown and ring-buffer attach path.** The PTY reader now
-  fails fast on a full outbound channel instead of blocking inside the reader
-  thread, and terminal attach/replay code is less twiddly around ring state.
-- **Smarter WebSocket keep-alive.** Idle connections are still probed, but the
-  server now resets the idle timer on the **pong it just sent** (not on the
-  incoming ping), so a half-closed client can't keep the server convinced the
-  connection is alive.
-- **Windows cleanup hardened.** `chat_cancel` and server shutdown both kill
-  Windows agent processes with separate `OpenProcess(...)` / `TerminateProcess(...)`
-  / `CloseHandle(...)` calls, and Cloudflare's Windows binary path/fallbacks
-  are a bit more robust.
+- **Lower terminal latency.** WebSocket batch window reduced from 20ms to 5ms
+  — fast enough that interactive echoes never feel delayed while still
+  coalescing rapid micro-bursts into fewer frames.
+- **LAN IP detection + QR.** In `--no-auth` mode the server detects its LAN IP
+  and prints a scannable QR code containing the server URL, making phone/tablet
+  setup easier.
+- **New commands.** `chat_install` (install agent CLIs from the app),
+  `chat_refresh_models`, `is_file_git_ignored`, `install_port_forward`,
+  `uninstall_port_forward`.
 
 ### Install (upgraded)
 
@@ -39,7 +41,13 @@ curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.s
 ```
 
 Re-running upgrades you to the newest release. Pin a version with
-`VERSION=0.2.2`. The Windows binary is `noide-server-windows-x86_64.exe`.
+`VERSION=0.3.0`.
+
+To install port-forward as well:
+
+```bash
+bash install.sh --all
+```
 
 #### Windows note
 
@@ -54,6 +62,7 @@ quarantine attribute once:
 
 ```bash
 xattr -d com.apple.quarantine "$(command -v noide-server)"
+xattr -d com.apple.quarantine "$(command -v port-forward)"
 ```
 
 ### Run
@@ -82,13 +91,18 @@ already have a `wss://` path.
 | `noide-server-darwin-x86_64` | macOS (Intel) |
 | `noide-server-darwin-aarch64` | macOS (Apple Silicon) |
 | `noide-server-windows-x86_64.exe` | Windows (x86_64) |
+| `port-forward-linux-x86_64` | Linux (Intel/AMD) |
+| `port-forward-linux-aarch64` | Linux (ARM64) |
+| `port-forward-darwin-x86_64` | macOS (Intel) |
+| `port-forward-darwin-aarch64` | macOS (Apple Silicon) |
+| `port-forward-windows-x86_64.exe` | Windows (x86_64) |
 | `SHA256SUMS` | Checksums for all binaries |
 
 Install a downloaded binary manually:
 
 ```bash
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.2.2/noide-server-linux-x86_64
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.2.2/SHA256SUMS
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.0/noide-server-linux-x86_64
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.0/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/
 ```

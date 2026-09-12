@@ -9,10 +9,14 @@ The NoIDE app never runs on the same machine as this server: you point it at a
 `ws://` or `wss://` URL, enter a pairing code, and everything (file tree,
 editor, terminal, git, chat) runs on the host where `noide-server` runs.
 
+This repo also includes **port-forward** — a companion binary for exposing
+local ports via trycloudflare, localhost.run, or localtunnel.
+
 **Contents**
 
 - [Install](#install)
 - [Run](#run)
+- [Port Forward](#port-forward)
 - [Pair the NoIDE app](#pair-the-noide-app)
 - [Connect over the internet (wss)](#connect-over-the-internet-wss)
 - [Security](#security)
@@ -34,7 +38,7 @@ Supported platforms:
 
 ### Requirements
 
-- **No Rust needed.** `install.sh` downloads a prebuilt binary. A Rust
+- **No Rust needed.** `install.sh` downloads prebuilt binaries. A Rust
   toolchain is only required to [build from source](#build-from-source).
 - **No Node.js needed** for the core server (files, terminal, git, pairing).
   Node is only required by the **Chat AI agents** (kilo / opencode): those
@@ -73,6 +77,12 @@ VERSION=0.1.0 bash install.sh
 
 # Dry run: print what would happen without installing
 bash install.sh --dry-run
+
+# Install port-forward only
+bash install.sh --port-forward
+
+# Install both noide-server and port-forward
+bash install.sh --all
 ```
 
 ### Recommended: GitHub Codespaces
@@ -174,6 +184,7 @@ restarts.
 | `--token <value>` or `NOIDE_TOKEN=…` | Require this fixed token instead of pairing. Survives restarts. |
 | `--no-auth` | Accept unauthenticated connections. **Development / CI only.** |
 | `NOTERM_WS_ADDR=0.0.0.0:1421` | Bind address and port. |
+| `--no-cloudflare` | Disable Cloudflare Quick Tunnel auto-start. |
 
 ### Running it properly
 
@@ -198,6 +209,45 @@ systemctl --user daemon-reload
 systemctl --user enable --now noide-server
 journalctl --user -u noide-server -f   # see the pairing code / QR here
 ```
+
+---
+
+## Port Forward
+
+**port-forward** is a companion binary that exposes local ports to the internet
+via trycloudflare, localhost.run, or localtunnel. It's used by the NoIDE app's
+Port Forwarding feature but can also be used standalone.
+
+### Install
+
+```bash
+# Install port-forward only
+bash install.sh --port-forward
+
+# Or install both noide-server and port-forward
+bash install.sh --all
+```
+
+### Usage
+
+```bash
+# Expose port 3000 via Cloudflare Quick Tunnel
+port-forward --provider cloudflare --port 3000
+
+# Expose port 8080 via localhost.run
+port-forward --provider localhost.run --port 8080
+
+# Start the web UI for managing forwards
+port-forward --web 127.0.0.1:7420
+```
+
+### Options
+
+| Flag | Effect |
+|------|--------|
+| `--provider <name>` | Tunnel provider: `cloudflare`, `localhost.run`, or `localtunnel` |
+| `--port <port>` | Local port to expose |
+| `--web [addr]` | Start the web UI (default: `127.0.0.1:7420`) |
 
 ---
 
@@ -312,6 +362,9 @@ curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.s
 
 # Specific version
 VERSION=0.2.0 bash install.sh
+
+# Upgrade both noide-server and port-forward
+bash install.sh --all
 ```
 
 Restart the server after upgrading. **Check the release notes first** — if a
@@ -322,24 +375,36 @@ update too (see below).
 
 ## Build from source
 
+This repo is a Cargo workspace with two crates:
+
+```
+noide-server/
+├── server/          # noide-server binary
+└── port-forward/    # port-forward binary
+```
+
 ```bash
 git clone https://github.com/n-o-ide/noide-server
 cd noide-server
+
+# Build both binaries
 cargo build --release
-./target/release/noide-server
+
+# Or build individually
+cargo build --release -p noide-server
+cargo build --release -p port-forward
 ```
 
-Requires a Rust toolchain. Release builds use LTO + stripping (`opt-level=s`,
-`strip=true`) — see `Cargo.toml`.
+Binaries are in `target/release/`. Requires a Rust toolchain. Release builds
+use LTO + stripping (`opt-level=s`, `strip=true`) — see `Cargo.toml`.
 
 ---
 
 ## Protocol compatibility
 
 The WebSocket contract between this server and the NoIDE app is documented in
-[PROTOCOL.md](../PROTOCOL.md) (copy it into this repo when splitting out). The
-server and app can be on different versions; breaking protocol changes are
-called out in the release notes.
+[PROTOCOL.md](PROTOCOL.md). The server and app can be on different versions;
+breaking protocol changes are called out in the release notes.
 
 ---
 
