@@ -49,7 +49,7 @@ pub fn print_pairing(code: &str) {
 /// Render a QR code as terminal half-blocks (1 char per module, 2 module rows
 /// per text line) with black glyphs on a white background for maximum
 /// contrast on both light and dark terminal themes.
-fn print_qr(data: &str) {
+pub fn print_qr(data: &str) {
     let qr = QrCode::new(data).expect("failed to encode QR code");
     let size = qr.width();
     let colors = qr.to_colors();

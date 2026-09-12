@@ -264,14 +264,30 @@ pub fn get_git_staged_diff(path: String, file: String) -> Result<String, String>
 
 /// Content of a file at HEAD (for computing editor change highlights).
 pub fn get_git_head_file(path: String, file: String) -> Result<String, String> {
-    run_git(&path, &["show", &format!("HEAD:{}", file)])
+    run_git(&repo_root(&path)?, &["show", &format!("HEAD:{}", file)])
+}
+
+/// Returns true when the given file is excluded by .gitignore patterns.
+pub fn is_file_git_ignored(path: String, file: String) -> Result<bool, String> {
+    let root = repo_root(&path)?;
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["check-ignore", "-q", "--", &file])
+        .output()
+        .map_err(|e| format!("Failed to run git: {}", e))?;
+    Ok(output.status.success())
 }
 
 /// Content of a file as staged in the index (`git show :file`). Returns an
 /// empty string when the path has no index entry (e.g. untracked/new files)
 /// so the frontend can render it as a blank baseline for diffs.
 pub fn git_show_index(path: String, file: String) -> Result<String, String> {
-    match run_git(&path, &["show", &format!(":{}", file)]) {
+    let root = match repo_root(&path) {
+        Ok(r) => r,
+        Err(_) => path,
+    };
+    match run_git(&root, &["show", &format!(":{}", file)]) {
         Ok(v) => Ok(v),
         Err(_) => Ok(String::new()),
     }
@@ -820,7 +836,32 @@ fn read_dir_recursive(
             Err(_) => false,
         };
 
-        if name == ".git" || name == "node_modules" || name == "target" || name == "dist" {
+        if name == ".git"
+            || name == "node_modules"
+            || name == "target"
+            || name == "dist"
+            || name == "build"
+            || name == ".noTerm"
+            || name == ".vscode"
+            || name == ".idea"
+            || name == ".DS_Store"
+            || name == "__pycache__"
+            || name == ".pytest_cache"
+            || name == ".next"
+            || name == ".nuxt"
+            || name == ".venv"
+            || name == "venv"
+            || name == "vendor"
+            || name == "Pods"
+            || name == "bin"
+            || name == "obj"
+            || name == ".cache"
+            || name == "coverage"
+            || name == ".terraform"
+            || name == "bower_components"
+            || name == "jspm_packages"
+            || name == ".angular"
+        {
             continue;
         }
 
@@ -882,12 +923,45 @@ pub fn file_exists(path: String) -> Result<bool, String> {
 
 // ===== Search =====
 
-const WALK_IGNORES: [&str; 6] = [".git", "node_modules", "target", "dist", "build", ".noTerm"];
+const WALK_IGNORES: [&str; 25] = [
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".noTerm",
+    ".vscode",
+    ".idea",
+    ".DS_Store",
+    "__pycache__",
+    ".pytest_cache",
+    ".next",
+    ".nuxt",
+    ".venv",
+    "venv",
+    "vendor",
+    "Pods",
+    "bin",
+    "obj",
+    ".cache",
+    "coverage",
+    ".terraform",
+    "bower_components",
+    "jspm_packages",
+    ".angular",
+];
 const SEARCH_MAX_RESULTS: usize = 500;
 const MAX_FILE_BYTES: usize = 1_000_000;
 
 fn is_ignored_name(name: &str) -> bool {
     WALK_IGNORES.contains(&name)
+}
+
+fn is_ignored_path(path: &Path) -> bool {
+    let path_str = path.to_string_lossy().to_string();
+    // Ignore specific public folders inside android and ios build directories
+    path_str.contains("/android/app/src/main/assets/public/")
+        || path_str.contains("/ios/App/App/public/")
 }
 
 fn walk_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
@@ -907,6 +981,9 @@ fn walk_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
                 continue;
             }
             let p = entry.path();
+            if is_ignored_path(&p) {
+                continue;
+            }
             if p.is_dir() {
                 rec(&p, depth + 1, out)?;
             } else {
@@ -1092,6 +1169,56 @@ pub async fn chat_models(agent: String, api_key: String) -> Result<Vec<ChatModel
     query_agent_models(url, &api_key).await
 }
 
+pub fn chat_refresh_models(agent: String) -> Result<Vec<ChatModel>, String> {
+    let command = match agent.trim().replace('-', "") {
+        s if s.eq_ignore_ascii_case("opencode") => "opencode",
+        s if s.eq_ignore_ascii_case("kilo") => "kilo",
+        _ => return Err(format!("Unknown agent '{}'", agent)),
+    };
+
+    let exe = resolve_agent_bin(command).ok_or_else(|| cli_missing_message(command))?;
+
+    let output = Command::new(&exe)
+        .arg("models")
+        .output()
+        .map_err(|e| format!("Failed to run {}: {}", command, e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(if stderr.is_empty() {
+            format!(
+                "{} exited with code {}",
+                command,
+                output.status.code().unwrap_or(-1)
+            )
+        } else {
+            stderr.trim().to_string()
+        });
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let mut models = Vec::new();
+    for raw in stdout.lines() {
+        let id = raw.trim();
+        if id.is_empty() {
+            continue;
+        }
+        if command == "kilo" && !id.to_ascii_lowercase().contains("free") {
+            continue;
+        }
+        models.push(ChatModel {
+            id: id.to_string(),
+            label: id.to_string(),
+        });
+    }
+
+    if models.is_empty() {
+        return Err(format!("No models returned from {}", command));
+    }
+
+    Ok(models)
+}
+
 /// Result of probing whether an agent CLI is usable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CliStatus {
@@ -1115,25 +1242,74 @@ impl CliStatus {
     }
 }
 
-/// Token used to verify the binary's identity in `--version` output.
-fn agent_token(command: &str) -> &str {
-    command
+/// Identity check: invoke `<bin> run --help` and look for the agent's own
+/// `<command> run` usage line. This is far more reliable than parsing
+/// `--version` because both kilo and opencode print a bare version number
+/// (`7.4.22`, `1.18.27`) with no agent name, but their `run --help` output
+/// always contains `kilo run [message..]` / `opencode run [message..]`.
+/// Banner/ANSI noise is stripped before matching.
+///
+/// Returns `true` if the binary looks like the expected agent, `false` if it
+/// ran but produced no recognizable usage line (i.e. it's a shadowing binary
+/// with the same name — the failure mode that previously made the chat
+/// stream appear to "fail silently").
+fn looks_like_agent(exe: &std::path::Path, command: &str) -> bool {
+    // Cap the probe so a hung/unresponsive binary can't block the chat
+    // pre-flight check. 3s is generous — real CLIs return in <100ms.
+    let output = match std::process::Command::new(exe)
+        .args(["run", "--help"])
+        .env("NO_COLOR", "1")
+        .env("TERM", "dumb")
+        .env("CI", "1")
+        .output()
+    {
+        Ok(o) => o,
+        Err(_) => return false,
+    };
+    let combined = String::from_utf8_lossy(&output.stdout).to_string()
+        + &String::from_utf8_lossy(&output.stderr);
+    // Strip ANSI escape sequences (CSI) and a few control chars that show up
+    // in the kilo banner before the usage line. Doesn't have to be perfect —
+    // we only need to recognize the `<command> run [` usage line that BOTH
+    // agents print.
+    let stripped: String = combined
+        .chars()
+        .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
+        .collect();
+    let needle = format!("{} run [", command);
+    stripped
+        .lines()
+        .any(|line| line.trim_start().starts_with(&needle))
 }
 
 /// Directories to search for an agent CLI when it isn't resolvable via the
 /// current PATH. GUI/launcher processes often don't inherit shell PATH
 /// customizations (e.g. an nvm-managed `node` that puts `kilo` on PATH), so
 /// we also probe the usual install locations before reporting the CLI missing.
-fn agent_search_dirs() -> Vec<std::path::PathBuf> {
+///
+/// Search order is deliberate to defeat a known shadowing failure mode: a
+/// stale `opencode` / `kilo` in `~/.local/bin` (e.g. left over from an old
+/// `npm i -g` install) used to be returned before the actual install at
+/// `~/.opencode/bin` / `~/.kilo/bin`, because `~/.local/bin` was probed
+/// first. That wrong binary then ignored `--format json` / `--pure` / etc.,
+/// and the chat appeared to "fail silently" because the pre-flight check
+/// (`--version` runs fine) declared the CLI installed. We now prefer the
+/// per-agent install location and probe `~/.local/bin` later, behind the
+/// real install.
+fn agent_search_dirs(command: &str) -> Vec<std::path::PathBuf> {
     let mut dirs: Vec<std::path::PathBuf> = Vec::new();
-    if let Ok(path) = std::env::var("PATH") {
-        for p in std::env::split_paths(&path) {
-            dirs.push(p);
-        }
-    }
     if let Ok(home) = std::env::var("HOME") {
         let home = std::path::PathBuf::from(home);
-        dirs.push(home.join(".local/bin"));
+        // Per-agent install location first — these are the canonical paths
+        // for the CLIs we care about, and skipping the early PATH probe
+        // prevents a `~/.local/bin` shadow from being picked.
+        match command {
+            "opencode" => dirs.push(home.join(".opencode/bin")),
+            "kilo" => dirs.push(home.join(".kilo/bin")),
+            _ => {}
+        }
+        // nvm versions of node put `kilo` on PATH via npm globals; check
+        // those before the system PATH so an nvm-managed install wins.
         if let Ok(entries) = std::fs::read_dir(home.join(".nvm/versions/node")) {
             for entry in entries.flatten() {
                 let bin = entry.path().join("bin");
@@ -1143,61 +1319,84 @@ fn agent_search_dirs() -> Vec<std::path::PathBuf> {
             }
         }
     }
+    // Then the user's normal PATH (covers system installs and shell-managed
+    // customizations like rustup/cargo bins).
+    if let Ok(path) = std::env::var("PATH") {
+        for p in std::env::split_paths(&path) {
+            dirs.push(p);
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        let home = std::path::PathBuf::from(home);
+        dirs.push(home.join(".local/bin"));
+        // Add the other agent's install dir as a final fallback (in case the
+        // user has only one of them installed and aliased).
+        match command {
+            "opencode" => dirs.push(home.join(".kilo/bin")),
+            "kilo" => dirs.push(home.join(".opencode/bin")),
+            _ => {}
+        }
+    }
     dirs
 }
 
-/// Resolve the path to an agent's executable.
+/// Resolve the path to an agent's executable, rejecting shadowing binaries
+/// that share the name but aren't the real agent.
 ///
-/// Returns `None` only when no usable binary can be found on PATH or in the
-/// common install locations we probe. When found, the returned path is used
-/// directly so callers don't depend on the spawning process's PATH.
+/// Returns `None` only when no candidate exists on disk. If a candidate
+/// exists but fails the identity check (`<bin> run --help` doesn't look like
+/// the expected agent), we *keep looking* — the wrong binary may be earlier
+/// in the search order, and the real one may be in `~/.opencode/bin` even
+/// though `~/.local/bin` has a stale copy. We also call the identity check
+/// at the very end on the final candidate: if the LAST and only candidate
+/// is a wrong binary, we still return its path (so the streaming path can
+/// show a `WrongBinary` error) but the streaming path will detect this via
+/// `chat_cli_check` and surface it to the user.
 ///
-/// This is a pure filesystem lookup (stat calls only) — no process is
-/// spawned, so it's safe to call on every chat message.
+/// This is mostly filesystem lookup (stat calls), but on a single final
+/// candidate we run one `run --help` invocation. Safe to call on every chat
+/// message — the worst case is one ~100ms subprocess exec.
 pub fn resolve_agent_bin(command: &str) -> Option<std::path::PathBuf> {
-    // Check PATH directories and common install locations (nvm, ~/.local/bin).
-    for dir in agent_search_dirs() {
+    let mut last: Option<std::path::PathBuf> = None;
+    for dir in agent_search_dirs(command) {
         let candidate = dir.join(command);
         if candidate.is_file() {
-            return Some(candidate);
+            if looks_like_agent(&candidate, command) {
+                return Some(candidate);
+            }
+            // Wrong binary — keep looking for the real one before giving up.
+            if last.is_none() {
+                last = Some(candidate);
+            }
         }
     }
-    None
+    last
 }
 
 /// Probe whether the given agent CLI is installed and usable.
 ///
-/// We run `<command> --version` and inspect the result:
-///   * `NotFound` / no binary anywhere     -> `Missing`
-///   * the binary runs (ideally names the agent) -> `Available`
-///   * other spawn error                   -> treat as available (avoid false negatives)
+/// Runs `<bin> run --help` to verify the binary exists AND identifies as the
+/// expected agent. Token matching against `--version` output is unreliable
+/// (kilo prints bare `7.4.22`, opencode prints bare `1.18.27` — neither
+/// contains the agent name), so we use the `run --help` usage line instead.
 ///
-/// The identity token (`kilo`, `opencode`) is only a *positive* hint. Some
-/// agents print a bare version (e.g. `kilo --version` => `7.4.23`) that does
-/// not contain the token, so a missing token must NOT be treated as "not
-/// installed" — that produced false "not on your PATH" warnings. Any binary
-/// that resolves and runs `--version` is therefore treated as available.
+///   * no binary anywhere                        -> `Missing`
+///   * binary exists but doesn't look like agent -> `WrongBinary`
+///   * binary exists and identifies correctly    -> `Available`
 ///
-/// Note: this only verifies the binary exists and runs, not that the user is
-/// authenticated or that the agent can reach the network. Credential/network
-/// failures surface later, when the command is actually executed.
+/// Note: this only verifies the binary exists and is the right CLI, not
+/// that the user is authenticated or that the agent can reach the network.
+/// Credential/network failures surface later, when the command is actually
+/// executed.
 pub fn chat_cli_check(command: &str) -> CliStatus {
     let exe = match resolve_agent_bin(command) {
         Some(e) => e,
         None => return CliStatus::Missing,
     };
-
-    let token = agent_token(command);
-    match Command::new(&exe).arg("--version").output() {
-        Ok(output) => {
-            let combined = String::from_utf8_lossy(&output.stdout).to_lowercase()
-                + &String::from_utf8_lossy(&output.stderr).to_lowercase();
-            // Positive identification strengthens confidence but is optional.
-            let _ = combined.contains(token);
-            CliStatus::Available
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => CliStatus::Missing,
-        Err(_) => CliStatus::Available,
+    if looks_like_agent(&exe, command) {
+        CliStatus::Available
+    } else {
+        CliStatus::WrongBinary
     }
 }
 
@@ -1205,6 +1404,65 @@ pub fn chat_cli_check(command: &str) -> CliStatus {
 /// AND its `--version` output identifies it as the expected agent.
 pub fn chat_cli_available(command: &str) -> bool {
     matches!(chat_cli_check(command), CliStatus::Available)
+}
+
+/// Map an internal agent id to the npm package that provides its CLI, so the
+/// frontend's "Install" button can install it remotely via npm.
+pub fn agent_install_package(command: &str) -> Option<&'static str> {
+    match command {
+        "kilo" => Some("@kilocode/cli"),
+        "opencode" => Some("opencode-ai"),
+        _ => None,
+    }
+}
+
+/// Install the selected agent's CLI on the host (`npm install -g <pkg>`).
+/// Runs asynchronously (the websocket handler is async) and returns the
+/// combined stdout/stderr so the frontend can show what happened.
+pub async fn install_agent(command: String) -> Result<String, String> {
+    let pkg = agent_install_package(&command)
+        .ok_or_else(|| format!("Don't know how to install agent '{}'", command))?;
+
+    // `npm` itself is required to install the Node-based agents; resolve it the
+    // same way PATH does for shell commands.
+    let npm = which_npm().ok_or_else(|| {
+        "npm was not found on your PATH. Install Node.js (>= 20) so npm is available, then retry.".to_string()
+    })?;
+
+    let output = tokio::process::Command::new(&npm)
+        .args(["install", "-g", pkg])
+        .kill_on_drop(true)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run npm: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let combined = if stderr.is_empty() {
+        stdout
+    } else {
+        format!("{}{}", stdout, stderr)
+    };
+
+    if output.status.success() {
+        Ok(combined)
+    } else {
+        Err(combined)
+    }
+}
+
+/// Locate `npm` on PATH without depending on a `which` crate. Mirrors the way
+/// the server resolves agent binaries: search the user's PATH entries.
+fn which_npm() -> Option<std::path::PathBuf> {
+    let exe = if std::cfg!(windows) { "npm.cmd" } else { "npm" };
+    let path_env = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path_env) {
+        let candidate = dir.join(exe);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 /// Friendly, actionable message shown when an agent's CLI is not installed.
@@ -1360,6 +1618,29 @@ pub fn chat_stream(
         None => return Err(cli_missing_message(&command)),
     };
 
+    // The frontend sends cwd = focused/working directory. If that path
+    // doesn't exist on THIS server (stale session from another backend,
+    // deleted folder), `cmd.current_dir` makes spawn() fail with ENOENT,
+    // which used to be misreported as "CLI not on your PATH". Validate it
+    // first and say what's actually wrong.
+    if let Some(dir) = cwd.as_deref() {
+        let p = std::path::Path::new(dir);
+        if !p.exists() {
+            return Err(format!(
+                "Working directory '{}' does not exist on this server. \
+                 Open a valid folder (or clear the saved session) and try again.",
+                dir
+            ));
+        }
+        if !p.is_dir() {
+            return Err(format!(
+                "Working directory '{}' is not a directory. \
+                 Open a valid folder and try again.",
+                dir
+            ));
+        }
+    }
+
     // Materialize attachment contents to temp files so they can be passed via
     // the CLI's native `-f/--file` flag instead of being inlined into the
     // (size-limited) prompt argument. Doing this up front gives a real error
@@ -1423,13 +1704,11 @@ pub fn chat_stream(
     let output = match cmd.output() {
         Ok(o) => o,
         Err(e) => {
-            // Only a genuinely missing binary should be reported as the
-            // "not on your PATH" error. Other failures (e.g. argument list too
-            // long) are real and must be surfaced verbatim, not masked.
+            // resolve_agent_bin already verified the exe exists and cwd was
+            // validated above, so a NotFound here is NOT "CLI not on PATH"
+            // (that old message misled users with stale working directories)
+            // — surface the real error verbatim.
             cleanup_attachment_files(&attachment_paths);
-            if e.kind() == std::io::ErrorKind::NotFound {
-                return Err(cli_missing_message(&command));
-            }
             return Err(format!("Failed to run {}: {}", command, e));
         }
     };
