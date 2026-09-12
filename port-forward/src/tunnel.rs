@@ -288,7 +288,7 @@ pub async fn install_provider(provider: &str) -> Result<String, String> {
                         .await
                         .map_err(|e| format!("Failed to run package manager: {}", e))?;
                     let out = String::from_utf8_lossy(&output.stdout).to_string()
-                        + &String::from_utf8_lossy(&output.stderr).to_string();
+                        + String::from_utf8_lossy(&output.stderr).as_ref();
                     if which("ssh").is_ok() {
                         Ok(out)
                     } else {
@@ -303,7 +303,7 @@ pub async fn install_provider(provider: &str) -> Result<String, String> {
                         .await
                         .map_err(|e| format!("Failed to run brew: {}", e))?;
                     let out = String::from_utf8_lossy(&output.stdout).to_string()
-                        + &String::from_utf8_lossy(&output.stderr).to_string();
+                        + String::from_utf8_lossy(&output.stderr).as_ref();
                     if which("ssh").is_ok() {
                         Ok(out)
                     } else {
