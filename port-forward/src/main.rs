@@ -7,11 +7,7 @@ use axum::{
 use clap::Parser;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use std::{
-    convert::Infallible,
-    net::SocketAddr,
-    sync::Arc,
-};
+use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
 use tower::ServiceBuilder;
 use tower_http::{
@@ -63,14 +59,18 @@ struct AppState {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
         .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
         .init();
 
     let args = Args::parse();
 
     if let Some(web_addr) = args.web {
-        let state = AppState { active: Arc::new(Mutex::new(None)) };
+        let state = AppState {
+            active: Arc::new(Mutex::new(None)),
+        };
         let app = Router::new()
             .route("/", get(serve_ui))
             .route("/api/forward", get(sse_forward).post(json_forward))
@@ -143,7 +143,10 @@ async fn sse_forward(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Response {
     let provider = params.get("provider").cloned().unwrap_or_default();
-    let port = params.get("port").and_then(|p| p.parse().ok()).unwrap_or(3000);
+    let port = params
+        .get("port")
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(3000);
 
     stop_tunnel_internal(&state).await;
 
@@ -158,19 +161,22 @@ async fn sse_forward(
         let result = tunnel::run_tunnel(&provider_clone, port, tx_for_tunnel).await;
 
         if let Err(e) = result {
-            let _ = tx_for_stream
-                .blocking_send(format!("event: error\ndata: {}\n\n", escape_json(&e)));
+            let _ =
+                tx_for_stream.blocking_send(format!("event: error\ndata: {}\n\n", escape_json(&e)));
         }
 
         let mut active = state_clone.active.lock().await;
-        if active.as_ref().map(|(p, pr, _)| p == &provider_clone && *pr == port).unwrap_or(false) {
+        if active
+            .as_ref()
+            .map(|(p, pr, _)| p == &provider_clone && *pr == port)
+            .unwrap_or(false)
+        {
             *active = None;
         }
     });
 
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(|msg| {
-        Ok::<_, Infallible>(axum::response::sse::Event::default().data(msg))
-    });
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx)
+        .map(|msg| Ok::<_, Infallible>(axum::response::sse::Event::default().data(msg)));
 
     Sse::new(stream).into_response()
 }
@@ -190,14 +196,19 @@ async fn json_forward(
     let child_for_spawn = child_holder.clone();
     let tx_for_tunnel = tx.clone();
     tokio::spawn(async move {
-        let result = tunnel::run_tunnel_owned(&provider, port, tx_for_tunnel, child_for_spawn).await;
+        let result =
+            tunnel::run_tunnel_owned(&provider, port, tx_for_tunnel, child_for_spawn).await;
 
         if let Err(e) = result {
             tracing::error!("tunnel error: {}", e);
         }
 
         let mut active = state_clone.active.lock().await;
-        if active.as_ref().map(|(p, pr, _)| p == &provider && *pr == port).unwrap_or(false) {
+        if active
+            .as_ref()
+            .map(|(p, pr, _)| p == &provider && *pr == port)
+            .unwrap_or(false)
+        {
             *active = None;
         }
     });
@@ -216,16 +227,26 @@ async fn json_forward(
     }
 
     match url {
-        Some(u) => Json(ForwardResponse { ok: true, message: u }).into_response(),
-        None => Json(ForwardResponse { ok: false, message: logs.join("\n") }).into_response(),
+        Some(u) => Json(ForwardResponse {
+            ok: true,
+            message: u,
+        })
+        .into_response(),
+        None => Json(ForwardResponse {
+            ok: false,
+            message: logs.join("\n"),
+        })
+        .into_response(),
     }
 }
 
-async fn stop_forward(
-    axum::extract::State(state): axum::extract::State<AppState>,
-) -> Response {
+async fn stop_forward(axum::extract::State(state): axum::extract::State<AppState>) -> Response {
     stop_tunnel_internal(&state).await;
-    Json(ForwardResponse { ok: true, message: "stopped".into() }).into_response()
+    Json(ForwardResponse {
+        ok: true,
+        message: "stopped".into(),
+    })
+    .into_response()
 }
 
 async fn install_tool(
@@ -233,12 +254,24 @@ async fn install_tool(
 ) -> Response {
     let provider = params.get("provider").cloned().unwrap_or_default();
     if provider.is_empty() {
-        return Json(ForwardResponse { ok: false, message: "missing provider".into() }).into_response();
+        return Json(ForwardResponse {
+            ok: false,
+            message: "missing provider".into(),
+        })
+        .into_response();
     }
 
     match tunnel::install_provider(&provider).await {
-        Ok(output) => Json(ForwardResponse { ok: true, message: output }).into_response(),
-        Err(e) => Json(ForwardResponse { ok: false, message: e }).into_response(),
+        Ok(output) => Json(ForwardResponse {
+            ok: true,
+            message: output,
+        })
+        .into_response(),
+        Err(e) => Json(ForwardResponse {
+            ok: false,
+            message: e,
+        })
+        .into_response(),
     }
 }
 
@@ -253,5 +286,7 @@ async fn stop_tunnel_internal(state: &AppState) {
 }
 
 fn escape_json(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
 }

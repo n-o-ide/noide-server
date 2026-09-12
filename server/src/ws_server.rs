@@ -358,7 +358,9 @@ pub struct PortForwardState {
 
 impl PortForwardState {
     pub fn new() -> Self {
-        Self { forwards: tokio::sync::Mutex::new(HashMap::new()) }
+        Self {
+            forwards: tokio::sync::Mutex::new(HashMap::new()),
+        }
     }
 
     pub async fn stop(&self, id: &str) -> bool {
@@ -420,7 +422,15 @@ pub async fn start(
         let token = token.clone();
         let port_forward = port_forward.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, pty, chat_tracker, agent_servers, token, port_forward).await
+            if let Err(e) = handle_connection(
+                stream,
+                pty,
+                chat_tracker,
+                agent_servers,
+                token,
+                port_forward,
+            )
+            .await
             {
                 eprintln!("[NoIDE] WS connection error: {}", e);
             }
@@ -1507,7 +1517,9 @@ async fn spawn_port_forward_binary(
     let id = {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        let hex: String = (0..8).map(|_| format!("{:x}", rng.gen::<u8>() % 16)).collect();
+        let hex: String = (0..8)
+            .map(|_| format!("{:x}", rng.gen::<u8>() % 16))
+            .collect();
         format!("pf-{}", hex)
     };
 
@@ -1517,7 +1529,9 @@ async fn spawn_port_forward_binary(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
-    let child = cmd.spawn().map_err(|e| format!("Failed to start port-forward: {}", e))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start port-forward: {}", e))?;
 
     // Register the child so it can be stopped later.
     state.forwards.lock().await.insert(id.clone(), child);
@@ -1646,7 +1660,11 @@ async fn spawn_port_forward_binary(
 
 /// Locate the standalone `port-forward` binary on PATH.
 fn find_port_forward_binary() -> Option<std::path::PathBuf> {
-    let exe = if std::cfg!(windows) { "port-forward.exe" } else { "port-forward" };
+    let exe = if std::cfg!(windows) {
+        "port-forward.exe"
+    } else {
+        "port-forward"
+    };
 
     // 1. Check PATH first.
     if let Some(path_env) = std::env::var_os("PATH") {
@@ -1689,7 +1707,9 @@ async fn install_port_forward_command() -> Result<Value, String> {
     }
 
     let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let project_root = server_dir.parent().ok_or_else(|| "cannot locate project root".to_string())?;
+    let project_root = server_dir
+        .parent()
+        .ok_or_else(|| "cannot locate project root".to_string())?;
     let port_forward_dir = project_root.join("port-forward");
 
     if !port_forward_dir.join("Cargo.toml").exists() {
@@ -1702,10 +1722,16 @@ async fn install_port_forward_command() -> Result<Value, String> {
 
     let cargo = std::env::var_os("CARGO")
         .or_else(|| find_cargo_binary().map(|p| p.as_os_str().to_owned()))
-        .ok_or_else(|| "cargo is not on PATH. Install Rust (rustup) first, then retry.".to_string())?;
+        .ok_or_else(|| {
+            "cargo is not on PATH. Install Rust (rustup) first, then retry.".to_string()
+        })?;
 
     let output = tokio::process::Command::new(&cargo)
-        .args(["install", "--path", port_forward_dir.to_str().unwrap_or("port-forward")])
+        .args([
+            "install",
+            "--path",
+            port_forward_dir.to_str().unwrap_or("port-forward"),
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
@@ -1715,7 +1741,11 @@ async fn install_port_forward_command() -> Result<Value, String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let combined = if stderr.is_empty() { stdout } else { format!("{}\n{}", stdout, stderr) };
+    let combined = if stderr.is_empty() {
+        stdout
+    } else {
+        format!("{}\n{}", stdout, stderr)
+    };
 
     if output.status.success() && find_port_forward_binary().is_some() {
         Ok(json!({ "installed": true, "output": combined }))
@@ -1725,7 +1755,11 @@ async fn install_port_forward_command() -> Result<Value, String> {
 }
 
 async fn uninstall_port_forward_command() -> Result<Value, String> {
-    let exe = if std::cfg!(windows) { "port-forward.exe" } else { "port-forward" };
+    let exe = if std::cfg!(windows) {
+        "port-forward.exe"
+    } else {
+        "port-forward"
+    };
     let path_env = std::env::var_os("PATH").ok_or("PATH not set")?;
     let mut removed = false;
     for dir in std::env::split_paths(&path_env) {
@@ -1745,7 +1779,11 @@ async fn uninstall_port_forward_command() -> Result<Value, String> {
 }
 
 fn find_cargo_binary() -> Option<std::path::PathBuf> {
-    let exe = if std::cfg!(windows) { "cargo.exe" } else { "cargo" };
+    let exe = if std::cfg!(windows) {
+        "cargo.exe"
+    } else {
+        "cargo"
+    };
     let path_env = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&path_env) {
         let candidate = dir.join(exe);
@@ -1764,7 +1802,10 @@ async fn start_port_forward_web_command(
     let bin = match find_port_forward_binary() {
         Some(p) => p,
         None => {
-            return Err("port-forward binary is not installed. Install it from the Apps folder first.".into());
+            return Err(
+                "port-forward binary is not installed. Install it from the Apps folder first."
+                    .into(),
+            );
         }
     };
 
@@ -1792,7 +1833,9 @@ async fn start_port_forward_web_command(
         .stderr(Stdio::null())
         .kill_on_drop(false);
 
-    let child = cmd.spawn().map_err(|e| format!("Failed to start port-forward web UI: {}", e))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start port-forward web UI: {}", e))?;
 
     {
         let mut guard = port_forward.forwards.lock().await;
@@ -1820,7 +1863,10 @@ async fn start_port_forward_web_command(
     }
 
     port_forward.stop("web").await;
-    Err(format!("port-forward web UI did not start listening on {}", addr))
+    Err(format!(
+        "port-forward web UI did not start listening on {}",
+        addr
+    ))
 }
 
 async fn stop_port_forward_web_command(

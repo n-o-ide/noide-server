@@ -223,7 +223,14 @@ fn main() {
         }
 
         // Run the server and wait for shutdown signal.
-        let server_fut = ws_server::start(manager, &addr, chat_tracker, agent_servers, token, port_forward.clone());
+        let server_fut = ws_server::start(
+            manager,
+            &addr,
+            chat_tracker,
+            agent_servers,
+            token,
+            port_forward.clone(),
+        );
 
         // Subscribe to the shutdown channel and wait for a signal.
         let shutdown_fut = async {
