@@ -26,8 +26,6 @@ jobs:
     name: build ${{ matrix.target }}
     needs: check
     runs-on: ${{ matrix.os }}
-    # Packaging steps below use bash conditionals; windows-latest defaults to
-    # PowerShell but ships Git Bash, so pin bash for the whole job.
     defaults:
       run:
         shell: bash
@@ -39,16 +37,10 @@ jobs:
             target: linux-x86_64
           - os: ubuntu-24.04-arm
             target: linux-aarch64
-          # GitHub retired its Intel macOS runners (macos-13). macOS runners
-          # are Apple Silicon now, so darwin-x86_64 is cross-compiled here by
-          # adding the Intel target — rustc links macOS->macOS cross-builds
-          # natively with no extra toolchain.
           - os: macos-15
             target: darwin-aarch64
           - os: macos-15
             target: darwin-x86_64
-          # windows-latest is x64 natively, so this builds straight out of
-          # the box with the MSVC toolchain (no extra target needed).
           - os: windows-latest
             target: windows-x86_64
     steps:
@@ -63,6 +55,6 @@ jobs:
           else
             cargo build --locked
           fi
-      - name: Smoke test (handshake + pairing auth)
+      - name: Smoke test noide-server (handshake + pairing auth)
         if: runner.os == 'Linux'
         run: node scripts/smoke-test.mjs target/debug/noide-server

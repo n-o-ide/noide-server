@@ -1,8 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
-use std::process::Stdio;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -241,19 +240,21 @@ fn spawn_subscriber_task(
     stats: Arc<Mutex<ConnStats>>,
 ) {
     tokio::spawn(async move {
-        // Interactive terminal latency: the batch window coalesces rapid
-        // bursts (e.g. a `cat` dumping a file) into fewer WS frames, but
-        // even a single interactive echo (keystroke, prompt refresh) must
-        // not be held for the full window. 5 ms is one-third of a 60 Hz
-        // frame — fast enough that the user never perceives a delay, while
-        // still absorbing micro-bursts that would otherwise be individual
-        // frames.
-        const BATCH_WINDOW: std::time::Duration = std::time::Duration::from_millis(5);
+        const BATCH_WINDOW: std::time::Duration = std::time::Duration::from_millis(20);
+        // When nothing has been flushed for at least this long the link is
+        // considered idle: the next chunk is sent immediately instead of
+        // waiting out BATCH_WINDOW. Batching only pays off while output is
+        // streaming continuously.
+        const IDLE_RESET: std::time::Duration = std::time::Duration::from_millis(100);
 
         let mut pending: Vec<u8> = Vec::new();
         let mut pending_from: u64 = 0;
         let mut flush_at: Option<tokio::time::Instant> = None;
-        let mut last_flush = tokio::time::Instant::now();
+        // Initialised to "long ago" so the very first chunk of a session
+        // (e.g. the shell prompt right after attach) is also sent right away.
+        let mut last_flush = tokio::time::Instant::now()
+            .checked_sub(IDLE_RESET)
+            .unwrap_or_else(tokio::time::Instant::now);
 
         // Drain the pending batch, returning it ready to encode (or None).
         let take_batch = |pending: &mut Vec<u8>,
@@ -314,19 +315,20 @@ fn spawn_subscriber_task(
 
             match item {
                 SubMsg::Out { from, data } => {
-                    // Always coalesce within the batch window (5 ms). The old
-                    // idle check sent the first chunk immediately, which broke
-                    // echo coalescing — the second character arrived as a
-                    // separate frame. With a 5 ms window the prompt延迟 is
-                    // imperceptible and consecutive echoes always batch.
+                    // A chunk arriving with nothing pending while the link has
+                    // been quiet is likely a lone interactive echo — send it
+                    // now instead of holding it for the batch window. Once
+                    // output streams continuously the window applies again.
+                    let idle = pending.is_empty() && last_flush.elapsed() >= IDLE_RESET;
                     if pending.is_empty() {
                         pending_from = from;
                     }
                     pending.extend_from_slice(&data);
                     if pending.len() >= FRAME_MAX {
                         flush_batch!();
-                    } else if flush_at.is_none() {
+                    } else if idle || flush_at.is_none() {
                         flush_at = Some(tokio::time::Instant::now() + BATCH_WINDOW);
+                        flush_batch!();
                     }
                 }
                 SubMsg::Exit { code } => {
@@ -349,45 +351,12 @@ fn spawn_subscriber_task(
     });
 }
 
-/// Tracks the standalone `port-forward --web` child process so we can keep
-/// it alive across multiple app opens and stop it cleanly on shutdown.
-#[derive(Debug, Default)]
-pub struct PortForwardState {
-    pub forwards: tokio::sync::Mutex<HashMap<String, tokio::process::Child>>,
-}
-
-impl PortForwardState {
-    pub fn new() -> Self {
-        Self { forwards: tokio::sync::Mutex::new(HashMap::new()) }
-    }
-
-    pub async fn stop(&self, id: &str) -> bool {
-        let mut guard = self.forwards.lock().await;
-        if let Some(mut child) = guard.remove(id) {
-            let _ = child.start_kill();
-            let _ = child.wait().await;
-            true
-        } else {
-            false
-        }
-    }
-
-    pub async fn stop_all(&self) {
-        let mut guard = self.forwards.lock().await;
-        for (_, mut child) in guard.drain() {
-            let _ = child.start_kill();
-            let _ = child.wait().await;
-        }
-    }
-}
-
 pub async fn start(
     pty: Arc<Mutex<PtyManager>>,
     addr: &str,
     chat_tracker: Arc<ChatProcessTracker>,
     agent_servers: Arc<AgentServerManager>,
     token: Option<String>,
-    port_forward: Arc<PortForwardState>,
 ) -> std::io::Result<()> {
     // Reap exited or long-abandoned sessions so shells never leak as
     // orphans on the host (a session with no subscriber is kept alive for
@@ -418,9 +387,8 @@ pub async fn start(
         let chat_tracker = chat_tracker.clone();
         let agent_servers = agent_servers.clone();
         let token = token.clone();
-        let port_forward = port_forward.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, pty, chat_tracker, agent_servers, token, port_forward).await
+            if let Err(e) = handle_connection(stream, pty, chat_tracker, agent_servers, token).await
             {
                 eprintln!("[NoIDE] WS connection error: {}", e);
             }
@@ -438,7 +406,6 @@ async fn handle_connection(
     chat_tracker: Arc<ChatProcessTracker>,
     agent_servers: Arc<AgentServerManager>,
     expected_token: Option<String>,
-    port_forward: Arc<PortForwardState>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Interactive terminal traffic is a stream of small messages; without
     // TCP_NODELAY the Nagle algorithm can hold a small write until earlier
@@ -611,7 +578,6 @@ async fn handle_connection(
                 let stats_t = stats.clone();
                 let chat_tracker_t = chat_tracker.clone();
                 let agent_servers_t = agent_servers.clone();
-                let port_forward_t = port_forward.clone();
                 tokio::spawn(async move {
                     let res = handle(
                         &req,
@@ -622,7 +588,6 @@ async fn handle_connection(
                         stats_t,
                         chat_tracker_t,
                         agent_servers_t,
-                        port_forward_t,
                     )
                     .await;
                     let resp = match res {
@@ -631,56 +596,6 @@ async fn handle_connection(
                     };
                     let _ = out_tx_t.send(Message::Text(resp.to_string())).await;
                 });
-            }
-            Message::Binary(data) => {
-                // Binary input frames: fast path for terminal keystrokes.
-                // Layout: u8 type | u32 LE session_id_len | session_id | payload
-                // type 0x01 = PTY_INPUT (raw bytes written directly to the pty)
-                {
-                    let mut s = stats.lock().unwrap();
-                    s.in_msgs += 1;
-                    s.in_bytes += data.len() as u64;
-                }
-                eprintln!(
-                    "[NoIDE] binary frame received: {} bytes, first byte: 0x{:02x}",
-                    data.len(),
-                    data.first().unwrap_or(&0)
-                );
-                if data.len() < 5 {
-                    eprintln!("[NoIDE] binary frame too short: {} bytes", data.len());
-                    continue;
-                }
-                let frame_type = data[0];
-                if frame_type != 0x01 {
-                    continue; // unknown binary frame type — ignore
-                }
-                let sid_len = u32::from_le_bytes([data[1], data[2], data[3], data[4]]) as usize;
-                if data.len() < 5 + 4 + sid_len {
-                    eprintln!(
-                        "[NoIDE] binary frame malformed: data.len()={}, 5+4+sid_len={}",
-                        data.len(),
-                        5 + 4 + sid_len
-                    );
-                    continue;
-                }
-                let session_id = match std::str::from_utf8(&data[5..5 + sid_len]) {
-                    Ok(s) => s.to_string(),
-                    Err(_) => {
-                        eprintln!("[NoIDE] binary frame: invalid session id UTF-8");
-                        continue;
-                    }
-                };
-                let payload = &data[5 + sid_len..];
-                eprintln!(
-                    "[NoIDE] binary pty_write: session={}, payload_len={}",
-                    session_id,
-                    payload.len()
-                );
-                // Write directly to the pty — no JSON parse, no command dispatch,
-                // no mutex contention beyond the brief pty lock.
-                if let Ok(mut mgr) = pty.lock() {
-                    let _ = mgr.write_binary(&session_id, payload);
-                }
             }
             Message::Close(_) => break,
             _ => {}
@@ -782,7 +697,6 @@ async fn handle(
     stats: Arc<Mutex<ConnStats>>,
     chat_tracker: Arc<ChatProcessTracker>,
     agent_servers: Arc<AgentServerManager>,
-    port_forward: Arc<PortForwardState>,
 ) -> Result<Value, String> {
     let args = &req.args;
     match req.command.as_str() {
@@ -889,14 +803,6 @@ async fn handle(
             let file: String = arg(args, "file")?;
             Ok(
                 serde_json::to_value(commands::get_git_head_file(path, file)?)
-                    .unwrap_or(Value::Null),
-            )
-        }
-        "is_file_git_ignored" => {
-            let path: String = arg(args, "path")?;
-            let file: String = arg(args, "file")?;
-            Ok(
-                serde_json::to_value(commands::is_file_git_ignored(path, file)?)
                     .unwrap_or(Value::Null),
             )
         }
@@ -1437,10 +1343,6 @@ async fn handle(
                     .unwrap_or(Value::Null),
             )
         }
-        "chat_refresh_models" => {
-            let agent: String = arg(args, "agent")?;
-            Ok(serde_json::to_value(commands::chat_refresh_models(agent)?).unwrap_or(Value::Null))
-        }
         "chat_check_install" => {
             let command: String = arg(args, "command")?;
             // Return the discrete status string ("available" | "missing" |
@@ -1454,378 +1356,6 @@ async fn handle(
                     .unwrap_or(Value::Null),
             )
         }
-        "chat_install" => {
-            let command: String = arg(args, "command")?;
-            match commands::install_agent(command).await {
-                Ok(output) => Ok(json!({ "installed": true, "output": output })),
-                Err(error) => Ok(json!({ "installed": false, "error": error })),
-            }
-        }
-        "install_port_forward" => install_port_forward_command().await,
-        "uninstall_port_forward" => uninstall_port_forward_command().await,
-        "start_port_forward_web" => start_port_forward_web_command(port_forward.clone()).await,
-        "stop_port_forward_web" => stop_port_forward_web_command(port_forward.clone()).await,
-        "port_forward" => {
-            let provider_str: String = arg(args, "provider")?;
-            let port: u16 = arg(args, "port")?;
-            spawn_port_forward_binary(provider_str, port, port_forward.clone(), out_tx).await
-        }
-        "stop_port_forward" => {
-            let id: String = arg(args, "id")?;
-            let stopped = port_forward.stop(&id).await;
-            Ok(json!({ "stopped": stopped }))
-        }
         other => Err(format!("unknown command: {}", other)),
     }
-}
-
-/// Spawn the standalone `port-forward` binary and tunnel its stdout/stderr
-/// back to the frontend as WS events.
-///
-/// Protocol emitted on the wire (all events include `"id"` in payload):
-///   event `port_forward_log`   payload `{ "id": "...", "line": "..." }` for each line
-///   event `port_forward_done`  payload `{ "id": "...", "url": "https://..." }` when ready
-///   event `port_forward_error` payload `{ "id": "...", "message": "..." }` on failure
-///
-/// Returns `{ "id": "..." }` immediately.
-async fn spawn_port_forward_binary(
-    provider: String,
-    port: u16,
-    state: Arc<PortForwardState>,
-    out_tx: mpsc::Sender<Message>,
-) -> Result<Value, String> {
-    let bin = match find_port_forward_binary() {
-        Some(p) => p,
-        None => {
-            let err = "`port-forward` binary is not installed on this server. \
-                       Install the NoTerm port-forward tool and make sure `port-forward` is on PATH, then retry."
-                .to_string();
-            return Err(err);
-        }
-    };
-
-    let id = {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        let hex: String = (0..8).map(|_| format!("{:x}", rng.gen::<u8>() % 16)).collect();
-        format!("pf-{}", hex)
-    };
-
-    let mut cmd = tokio::process::Command::new(&bin);
-    cmd.args(["--provider", &provider, "--port", &port.to_string()])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-
-    let child = cmd.spawn().map_err(|e| format!("Failed to start port-forward: {}", e))?;
-
-    // Register the child so it can be stopped later.
-    state.forwards.lock().await.insert(id.clone(), child);
-
-    let stdout = {
-        let mut guard = state.forwards.lock().await;
-        guard.get_mut(&id).and_then(|c| c.stdout.take())
-    };
-    let stderr = {
-        let mut guard = state.forwards.lock().await;
-        guard.get_mut(&id).and_then(|c| c.stderr.take())
-    };
-
-    let stdout = stdout.ok_or_else(|| "port-forward: missing stdout".to_string())?;
-    let stderr = stderr.ok_or_else(|| "port-forward: missing stderr".to_string())?;
-
-    let id_a = id.clone();
-    let id_b = id.clone();
-    let id_c = id.clone();
-    let id_d = id.clone();
-
-    let url_found = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
-    let url_found_a = url_found.clone();
-    let url_found_b = url_found.clone();
-
-    let tx_log_a = out_tx.clone();
-    let tx_log_b = out_tx.clone();
-    let tx_done = out_tx.clone();
-    let tx_done_b = out_tx.clone();
-    let tx_err = out_tx;
-
-    let stdout_task = tokio::spawn(async move {
-        use tokio::io::{AsyncBufReadExt, BufReader};
-        let mut reader = BufReader::new(stdout);
-        let mut line = String::new();
-        loop {
-            line.clear();
-            let n = reader.read_line(&mut line).await.ok()?;
-            if n == 0 {
-                break;
-            }
-            let trimmed = line.trim_end().to_string();
-            let _ = tx_log_a
-                .send(Message::Text(
-                    json!({"event": "port_forward_log", "payload": {"id": id_a, "line": trimmed}})
-                        .to_string(),
-                ))
-                .await;
-            if let Some(rest) = trimmed.strip_prefix("[URL] ") {
-                let url = rest.trim().to_string();
-                if !url.is_empty() {
-                    *url_found_a.lock().unwrap() = Some(url.clone());
-                    let _ = tx_done
-                        .send(Message::Text(
-                            json!({"event": "port_forward_done", "payload": {"id": id_b, "url": url}})
-                                .to_string(),
-                        ))
-                        .await;
-                }
-            }
-        }
-        Some(())
-    });
-
-    let stderr_task = tokio::spawn(async move {
-        use tokio::io::{AsyncBufReadExt, BufReader};
-        let mut reader = BufReader::new(stderr);
-        let mut line = String::new();
-        loop {
-            line.clear();
-            let n = reader.read_line(&mut line).await.ok()?;
-            if n == 0 {
-                break;
-            }
-            let trimmed = line.trim_end().to_string();
-            let _ = tx_log_b
-                .send(Message::Text(
-                    json!({"event": "port_forward_log", "payload": {"id": id_c, "line": trimmed}})
-                        .to_string(),
-                ))
-                .await;
-            if let Some(rest) = trimmed.strip_prefix("[URL] ") {
-                let url = rest.trim().to_string();
-                if !url.is_empty() {
-                    *url_found_b.lock().unwrap() = Some(url.clone());
-                    let _ = tx_done_b
-                        .send(Message::Text(
-                            json!({"event": "port_forward_done", "payload": {"id": id_d, "url": url}})
-                                .to_string(),
-                        ))
-                        .await;
-                }
-            }
-        }
-        Some(())
-    });
-
-    let id_done = id.clone();
-    let provider_for_wait = provider.clone();
-    let state_for_wait = state.clone();
-
-    tokio::spawn(async move {
-        let _ = futures_util::future::join(stdout_task, stderr_task).await;
-
-        // Clean up the child entry.
-        state_for_wait.forwards.lock().await.remove(&id_done);
-
-        if url_found.lock().unwrap().is_some() {
-            return;
-        }
-
-        let err_msg = format!(
-            "port-forward for `{}` on port {} exited without producing a URL.",
-            provider_for_wait, port
-        );
-        let _ = tx_err
-            .send(Message::Text(
-                json!({"event": "port_forward_error", "payload": {"id": id_done, "message": err_msg}})
-                    .to_string(),
-            ))
-            .await;
-    });
-
-    Ok(json!({ "id": id }))
-}
-
-/// Locate the standalone `port-forward` binary on PATH.
-fn find_port_forward_binary() -> Option<std::path::PathBuf> {
-    let exe = if std::cfg!(windows) { "port-forward.exe" } else { "port-forward" };
-
-    // 1. Check PATH first.
-    if let Some(path_env) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&path_env) {
-            let candidate = dir.join(exe);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    // 2. Dev fallback: look next to noide-server in the project tree.
-    //    Workspace layout: server/ and port-forward/ are siblings.
-    let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    if let Some(project_root) = server_dir.parent() {
-        let pf_dir = project_root.join("port-forward");
-        for profile in ["target/debug", "target/release"] {
-            let candidate = pf_dir.join(profile).join(exe);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    None
-}
-
-/// Install the `port-forward` binary onto this machine.
-///
-/// Strategy:
-///   1. If already on PATH, return immediately.
-///   2. Try `cargo install --path ../port-forward` from the noide-server dir
-///      (the workspace layout: `server/` and `port-forward/` are siblings).
-///   3. If that fails, surface the error so the frontend can guide the user.
-async fn install_port_forward_command() -> Result<Value, String> {
-    use std::process::Stdio;
-
-    if find_port_forward_binary().is_some() {
-        return Ok(json!({ "installed": true, "output": "port-forward is already installed." }));
-    }
-
-    let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let project_root = server_dir.parent().ok_or_else(|| "cannot locate project root".to_string())?;
-    let port_forward_dir = project_root.join("port-forward");
-
-    if !port_forward_dir.join("Cargo.toml").exists() {
-        return Err(
-            "The port-forward source is not available at ../port-forward relative to noide-server. \
-             Install it manually: cargo install --git <repo-url> port-forward"
-                .into(),
-        );
-    }
-
-    let cargo = std::env::var_os("CARGO")
-        .or_else(|| find_cargo_binary().map(|p| p.as_os_str().to_owned()))
-        .ok_or_else(|| "cargo is not on PATH. Install Rust (rustup) first, then retry.".to_string())?;
-
-    let output = tokio::process::Command::new(&cargo)
-        .args(["install", "--path", port_forward_dir.to_str().unwrap_or("port-forward")])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run cargo install: {}", e))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let combined = if stderr.is_empty() { stdout } else { format!("{}\n{}", stdout, stderr) };
-
-    if output.status.success() && find_port_forward_binary().is_some() {
-        Ok(json!({ "installed": true, "output": combined }))
-    } else {
-        Err(combined)
-    }
-}
-
-async fn uninstall_port_forward_command() -> Result<Value, String> {
-    let exe = if std::cfg!(windows) { "port-forward.exe" } else { "port-forward" };
-    let path_env = std::env::var_os("PATH").ok_or("PATH not set")?;
-    let mut removed = false;
-    for dir in std::env::split_paths(&path_env) {
-        let candidate = dir.join(exe);
-        if candidate.is_file() {
-            if let Err(e) = std::fs::remove_file(&candidate) {
-                return Err(format!("Failed to remove {}: {}", candidate.display(), e));
-            }
-            removed = true;
-        }
-    }
-    if removed {
-        Ok(json!({ "uninstalled": true }))
-    } else {
-        Err("port-forward binary was not found on PATH.".into())
-    }
-}
-
-fn find_cargo_binary() -> Option<std::path::PathBuf> {
-    let exe = if std::cfg!(windows) { "cargo.exe" } else { "cargo" };
-    let path_env = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path_env) {
-        let candidate = dir.join(exe);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
-async fn start_port_forward_web_command(
-    port_forward: Arc<PortForwardState>,
-) -> Result<Value, String> {
-    use std::process::Stdio;
-
-    let bin = match find_port_forward_binary() {
-        Some(p) => p,
-        None => {
-            return Err("port-forward binary is not installed. Install it from the Apps folder first.".into());
-        }
-    };
-
-    let addr = "127.0.0.1:7420";
-
-    // If already running, verify the port is actually serving before reusing.
-    {
-        let mut guard = port_forward.forwards.lock().await;
-        if let Some(child) = guard.get_mut("web") {
-            if let Ok(Some(_status)) = child.try_wait() {
-                guard.remove("web");
-            } else {
-                drop(guard);
-                if tokio::net::TcpStream::connect(addr).await.is_ok() {
-                    return Ok(json!({"started": true, "url": format!("http://{}", addr)}));
-                }
-                port_forward.stop("web").await;
-            }
-        }
-    }
-
-    let mut cmd = tokio::process::Command::new(&bin);
-    cmd.args(["--web", addr])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .kill_on_drop(false);
-
-    let child = cmd.spawn().map_err(|e| format!("Failed to start port-forward web UI: {}", e))?;
-
-    {
-        let mut guard = port_forward.forwards.lock().await;
-        guard.insert("web".to_string(), child);
-    }
-
-    // Wait briefly for the HTTP listener to come up.
-    for _ in 0..50 {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        if tokio::net::TcpStream::connect(addr).await.is_ok() {
-            return Ok(json!({"started": true, "url": format!("http://{}", addr)}));
-        }
-        {
-            let mut guard = port_forward.forwards.lock().await;
-            if let Some(child) = guard.get_mut("web") {
-                if let Ok(Some(status)) = child.try_wait() {
-                    guard.remove("web");
-                    return Err(format!(
-                        "port-forward web UI exited with status {} before listening on {}",
-                        status, addr
-                    ));
-                }
-            }
-        }
-    }
-
-    port_forward.stop("web").await;
-    Err(format!("port-forward web UI did not start listening on {}", addr))
-}
-
-async fn stop_port_forward_web_command(
-    port_forward: Arc<PortForwardState>,
-) -> Result<Value, String> {
-    port_forward.stop("web").await;
-    Ok(json!({"stopped": true}))
 }

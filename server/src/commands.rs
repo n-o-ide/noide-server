@@ -965,7 +965,12 @@ fn is_ignored_path(path: &Path) -> bool {
 }
 
 fn walk_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
-    fn rec(dir: &Path, depth: usize, out: &mut Vec<String>) -> std::io::Result<()> {
+    fn rec(
+        dir: &Path,
+        depth: usize,
+        out: &mut Vec<String>,
+        _base_dir: &Path,
+    ) -> std::io::Result<()> {
         if depth > 12 || out.len() > 20_000 {
             return Ok(());
         }
@@ -985,14 +990,14 @@ fn walk_files(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
                 continue;
             }
             if p.is_dir() {
-                rec(&p, depth + 1, out)?;
+                rec(&p, depth + 1, out, _base_dir)?;
             } else {
                 out.push(p.to_string_lossy().to_string());
             }
         }
         Ok(())
     }
-    rec(dir, 0, out).map_err(|e| format!("Failed to walk directory: {}", e))
+    rec(dir, 0, out, dir).map_err(|e| format!("Failed to walk directory: {}", e))
 }
 
 /// Full recursive file listing (absolute paths) for the fuzzy finder.
