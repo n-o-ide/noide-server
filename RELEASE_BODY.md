@@ -1,4 +1,4 @@
-## v0.3.3 — Workspace, Stability, and Cleanup
+## v0.3.4 — Workspace, Stability, and Cleanup
 
 Adds a built-in port-forwarding subsystem with Cloudflare/localhost.run/localtunnel
 support, a binary PTY fast path for lower-latency keystrokes, and a graceful
@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.s
 ```
 
 Re-running upgrades you to the newest release. Pin a version with
-`VERSION=0.3.3`.
+`VERSION=0.3.4`.
 
 To install port-forward as well:
 
@@ -101,8 +101,8 @@ already have a `wss://` path.
 Install a downloaded binary manually:
 
 ```bash
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.3/noide-server-linux-x86_64
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.3/SHA256SUMS
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.4/noide-server-linux-x86_64
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.4/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/
 ```

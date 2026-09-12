@@ -73,7 +73,7 @@ Other install options:
 
 ```bash
 # Pin a specific version
-VERSION=0.3.3 bash install.sh
+VERSION=0.3.4 bash install.sh
 
 # Dry run: print what would happen without installing
 bash install.sh --dry-run
@@ -361,7 +361,7 @@ Then connect the app to `wss://your-url` and pair as usual.
 curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
 
 # Specific version
-VERSION=0.3.3 bash install.sh
+VERSION=0.3.4 bash install.sh
 
 # Upgrade both noide-server and port-forward
 bash install.sh --all
