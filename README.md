@@ -9,14 +9,18 @@ The NoIDE app never runs on the same machine as this server: you point it at a
 `ws://` or `wss://` URL, enter a pairing code, and everything (file tree,
 editor, terminal, git, chat) runs on the host where `noide-server` runs.
 
-This repo also includes **port-forward** — a companion binary for exposing
-local ports via trycloudflare, localhost.run, or localtunnel.
+This repo also includes companion binaries:
+- **port-forward** — expose local ports via trycloudflare, localhost.run, or localtunnel
+- **code-vault** — save and manage code snippets with syntax highlighting
+- **http-request** — test APIs with folder organization and OpenAPI import
 
 **Contents**
 
 - [Install](#install)
 - [Run](#run)
 - [Port Forward](#port-forward)
+- [Code Vault](#code-vault)
+- [HTTP Request](#http-request)
 - [Pair the NoIDE app](#pair-the-noide-app)
 - [Connect over the internet (wss)](#connect-over-the-internet-wss)
 - [Security](#security)
@@ -73,7 +77,7 @@ Other install options:
 
 ```bash
 # Pin a specific version
-VERSION=0.3.4 bash install.sh
+VERSION=0.3.5 bash install.sh
 
 # Dry run: print what would happen without installing
 bash install.sh --dry-run
@@ -81,7 +85,13 @@ bash install.sh --dry-run
 # Install port-forward only
 bash install.sh --port-forward
 
-# Install both noide-server and port-forward
+# Install code-vault only
+bash install.sh --code-vault
+
+# Install http-request only
+bash install.sh --http-request
+
+# Install all binaries
 bash install.sh --all
 ```
 
@@ -224,7 +234,7 @@ Port Forwarding feature but can also be used standalone.
 # Install port-forward only
 bash install.sh --port-forward
 
-# Or install both noide-server and port-forward
+# Or install all binaries
 bash install.sh --all
 ```
 
@@ -248,6 +258,92 @@ port-forward --web 127.0.0.1:7420
 | `--provider <name>` | Tunnel provider: `cloudflare`, `localhost.run`, or `localtunnel` |
 | `--port <port>` | Local port to expose |
 | `--web [addr]` | Start the web UI (default: `127.0.0.1:7420`) |
+
+---
+
+## Code Vault
+
+**code-vault** is a companion binary for saving and managing code snippets
+with syntax highlighting. It runs as a local HTTP server and is accessed
+through the NoIDE app's Code Vault feature.
+
+### Install
+
+```bash
+# Install code-vault only
+bash install.sh --code-vault
+
+# Or install all binaries
+bash install.sh --all
+```
+
+### Features
+
+- Save and organize code snippets with syntax highlighting
+- Support for 20+ programming languages
+- JSON import/export for backup and sharing
+- Full-text search across all snippets
+- Auto-save with debounced updates
+
+### API
+
+Code Vault exposes a REST API on localhost:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/snippets` | List all snippets |
+| POST | `/snippets` | Create a new snippet |
+| GET | `/snippets/:id` | Get a snippet by ID |
+| PUT | `/snippets/:id` | Update a snippet |
+| DELETE | `/snippets/:id` | Delete a snippet |
+| GET | `/export` | Export all snippets as JSON |
+| POST | `/import` | Import snippets from JSON |
+
+---
+
+## HTTP Request
+
+**http-request** is a companion binary for testing REST APIs. It runs as a
+local HTTP server and is accessed through the NoIDE app's HTTP Request feature.
+
+### Install
+
+```bash
+# Install http-request only
+bash install.sh --http-request
+
+# Or install all binaries
+bash install.sh --all
+```
+
+### Features
+
+- Support for all HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
+- Custom headers and request bodies (JSON/text)
+- Request history with folder organization
+- OpenAPI/Swagger spec import
+- Collection export/import for backup and sharing
+- Response time tracking
+
+### API
+
+HTTP Request exposes a REST API on localhost:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/send` | Send an HTTP request |
+| GET | `/collections` | List all saved requests (grouped by folder) |
+| POST | `/collections` | Save a request |
+| GET | `/collections/:id` | Get a saved request |
+| PUT | `/collections/:id` | Update a saved request |
+| DELETE | `/collections/:id` | Delete a saved request |
+| GET | `/folders` | List all folders |
+| POST | `/folders` | Create a folder |
+| PUT | `/folders/:id` | Update a folder |
+| DELETE | `/folders/:id` | Delete a folder |
+| GET | `/export` | Export all collections as JSON |
+| POST | `/import` | Import collections from JSON |
+| POST | `/import-openapi` | Import from OpenAPI spec |
 
 ---
 
@@ -361,9 +457,9 @@ Then connect the app to `wss://your-url` and pair as usual.
 curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
 
 # Specific version
-VERSION=0.3.4 bash install.sh
+VERSION=0.3.5 bash install.sh
 
-# Upgrade both noide-server and port-forward
+# Upgrade all binaries
 bash install.sh --all
 ```
 
@@ -375,24 +471,28 @@ update too (see below).
 
 ## Build from source
 
-This repo is a Cargo workspace with two crates:
+This repo is a Cargo workspace with four crates:
 
 ```
 noide-server/
 ├── server/          # noide-server binary
-└── port-forward/    # port-forward binary
+├── port-forward/    # port-forward binary
+├── code-vault/      # code-vault binary
+└── http-request/    # http-request binary
 ```
 
 ```bash
 git clone https://github.com/n-o-ide/noide-server
 cd noide-server
 
-# Build both binaries
+# Build all binaries
 cargo build --release
 
 # Or build individually
 cargo build --release -p noide-server
 cargo build --release -p port-forward
+cargo build --release -p code-vault
+cargo build --release -p http-request
 ```
 
 Binaries are in `target/release/`. Requires a Rust toolchain. Release builds

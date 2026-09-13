@@ -1,38 +1,29 @@
-## v0.3.4 — Workspace, Stability, and Cleanup
+## v0.3.5 — Code Vault and HTTP Request
 
-Adds a built-in port-forwarding subsystem with Cloudflare/localhost.run/localtunnel
-support, a binary PTY fast path for lower-latency keystrokes, and a graceful
-shutdown that tears down runtimes cleanly instead of panicking. Also includes
-Windows support, a Cloudflare Quick Tunnel, and a round of stability fixes.
+Adds two new standalone binaries: **code-vault** for saving and managing code
+snippets with syntax highlighting, and **http-request** for testing APIs with
+folder organization and OpenAPI import. Both run as local HTTP servers
+proxied through noide-server, following the same pattern as port-forward.
 
 ### Highlights
 
-- **Port Forwarding.** A new `port-forward` binary ships alongside `noide-server`.
-  Expose local ports via Cloudflare Quick Tunnel, localhost.run, or localtunnel —
-  managed from the NoIDE app's Ports panel or used standalone from the CLI.
-  Install with `bash install.sh --port-forward` or `bash install.sh --all`.
-- **Binary PTY fast path.** Terminal keystrokes can now be sent as raw binary
-  frames (type `0x01`) instead of JSON, skipping UTF-8 validation and reducing
-  frame overhead for interactive use.
-- **Graceful shutdown.** Ctrl+C now signals the async runtime to shut down
-  cleanly instead of calling `process::exit` from a signal handler, preventing
-  "Cannot drop a runtime in a context where blocking is not allowed" panics.
-- **Windows support.** Release builds now produce
-  `noide-server-windows-x86_64.exe`; terminal tabs default to PowerShell and
-  `git` is required for Source Control (install [Git for Windows](https://git-scm.com/download/win) if it is missing).
-- **Cloudflare Quick Tunnel.** With no flags the server downloads
-  `cloudflared` into `~/.noide` (or `%LOCALAPPDATA%\noide` on Windows) and
-  starts a `trycloudflare.com` tunnel, printing a public `wss://`-friendly URL
-  to stderr. Drop `--no-cloudflare` if you bring your own reverse proxy.
-- **Lower terminal latency.** WebSocket batch window reduced from 20ms to 5ms
-  — fast enough that interactive echoes never feel delayed while still
-  coalescing rapid micro-bursts into fewer frames.
-- **LAN IP detection + QR.** In `--no-auth` mode the server detects its LAN IP
-  and prints a scannable QR code containing the server URL, making phone/tablet
-  setup easier.
-- **New commands.** `chat_install` (install agent CLIs from the app),
-  `chat_refresh_models`, `is_file_git_ignored`, `install_port_forward`,
-  `uninstall_port_forward`.
+- **Code Vault.** A new `code-vault` binary for saving, organizing, and
+  editing code snippets with syntax highlighting (via CodeMirror). Features
+  include JSON import/export, folder organization, and a full-text search
+  interface. Install with `bash install.sh --code-vault` or `bash install.sh --all`.
+- **HTTP Request.** A new `http-request` binary for testing REST APIs.
+  Supports all HTTP methods, custom headers, JSON/text bodies, request
+  history with folder organization, and OpenAPI spec import. Install with
+  `bash install.sh --http-request` or `bash install.sh --all`.
+- **OpenAPI Import.** Import API endpoints from OpenAPI/Swagger specs
+  directly into http-request. Endpoints are organized by tags into folders,
+  with sample request bodies generated from schemas.
+- **Collection Export/Import.** Both code-vault and http-request support
+  exporting and importing collections as JSON files for backup and sharing.
+- **New commands.** `check_code_vault`, `install_code_vault`,
+  `start_code_vault`, `stop_code_vault`, `code_vault_request`,
+  `check_http_request`, `install_http_request`, `start_http_request`,
+  `stop_http_request`, `http_request_request`.
 
 ### Install (upgraded)
 
@@ -41,12 +32,19 @@ curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.s
 ```
 
 Re-running upgrades you to the newest release. Pin a version with
-`VERSION=0.3.4`.
+`VERSION=0.3.5`.
 
-To install port-forward as well:
+To install all binaries:
 
 ```bash
 bash install.sh --all
+```
+
+Or install individually:
+
+```bash
+bash install.sh --code-vault
+bash install.sh --http-request
 ```
 
 #### Windows note
@@ -63,6 +61,8 @@ quarantine attribute once:
 ```bash
 xattr -d com.apple.quarantine "$(command -v noide-server)"
 xattr -d com.apple.quarantine "$(command -v port-forward)"
+xattr -d com.apple.quarantine "$(command -v code-vault)"
+xattr -d com.apple.quarantine "$(command -v http-request)"
 ```
 
 ### Run
@@ -96,13 +96,23 @@ already have a `wss://` path.
 | `port-forward-darwin-x86_64` | macOS (Intel) |
 | `port-forward-darwin-aarch64` | macOS (Apple Silicon) |
 | `port-forward-windows-x86_64.exe` | Windows (x86_64) |
+| `code-vault-linux-x86_64` | Linux (Intel/AMD) |
+| `code-vault-linux-aarch64` | Linux (ARM64) |
+| `code-vault-darwin-x86_64` | macOS (Intel) |
+| `code-vault-darwin-aarch64` | macOS (Apple Silicon) |
+| `code-vault-windows-x86_64.exe` | Windows (x86_64) |
+| `http-request-linux-x86_64` | Linux (Intel/AMD) |
+| `http-request-linux-aarch64` | Linux (ARM64) |
+| `http-request-darwin-x86_64` | macOS (Intel) |
+| `http-request-darwin-aarch64` | macOS (Apple Silicon) |
+| `http-request-windows-x86_64.exe` | Windows (x86_64) |
 | `SHA256SUMS` | Checksums for all binaries |
 
 Install a downloaded binary manually:
 
 ```bash
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.4/noide-server-linux-x86_64
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.4/SHA256SUMS
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.5/noide-server-linux-x86_64
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.5/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/
 ```

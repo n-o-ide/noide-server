@@ -147,6 +147,8 @@ fn main() {
         // One long-lived `<agent> serve` per agent, reused across chat messages.
         let agent_servers = Arc::new(AgentServerManager::new(chat_tracker.clone()));
         let port_forward = Arc::new(ws_server::PortForwardState::new());
+        let code_vault = Arc::new(ws_server::CodeVaultState::new());
+        let http_request = Arc::new(ws_server::HttpRequestState::new());
 
         // Broadcast channel for graceful shutdown (Ctrl+C, server error, etc.).
         // Broadcast is used instead of oneshot because the sender needs to be
@@ -223,14 +225,7 @@ fn main() {
         }
 
         // Run the server and wait for shutdown signal.
-        let server_fut = ws_server::start(
-            manager,
-            &addr,
-            chat_tracker,
-            agent_servers,
-            token,
-            port_forward.clone(),
-        );
+        let server_fut = ws_server::start(manager, &addr, chat_tracker, agent_servers, token, port_forward.clone(), code_vault, http_request);
 
         // Subscribe to the shutdown channel and wait for a signal.
         let shutdown_fut = async {
