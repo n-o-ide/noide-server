@@ -433,6 +433,7 @@ impl HttpRequestState {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn start(
     pty: Arc<Mutex<PtyManager>>,
     addr: &str,
@@ -498,6 +499,7 @@ pub async fn start(
 // shape, whose error type is a large HTTP response — not ours to change, so
 // the lint is allowed rather than boxing what the handshake API requires.
 #[allow(clippy::result_large_err)]
+#[allow(clippy::too_many_arguments)]
 async fn handle_connection(
     stream: tokio::net::TcpStream,
     pty: Arc<Mutex<PtyManager>>,
