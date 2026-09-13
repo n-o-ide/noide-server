@@ -34,7 +34,9 @@ impl Provider {
             Self::TryCloudflare => {
                 Some("Download cloudflared from https://github.com/cloudflare/cloudflared/releases")
             }
-            Self::LocalhostRun => Some("Install OpenSSH client via your system package manager (apt, brew, etc.)"),
+            Self::LocalhostRun => {
+                Some("Install OpenSSH client via your system package manager (apt, brew, etc.)")
+            }
             Self::Localtunnel => Some("Run: npm install -g localtunnel  (requires Node.js/npm)"),
         }
     }
@@ -42,7 +44,12 @@ impl Provider {
     pub fn args(self, port: u16) -> Vec<String> {
         match self {
             Self::TryCloudflare => {
-                vec!["tunnel".into(), "--url".into(), format!("http://127.0.0.1:{}", port), "--no-autoupdate".into()]
+                vec![
+                    "tunnel".into(),
+                    "--url".into(),
+                    format!("http://127.0.0.1:{}", port),
+                    "--no-autoupdate".into(),
+                ]
             }
             Self::LocalhostRun => {
                 vec![
@@ -62,25 +69,35 @@ impl Provider {
     pub fn parse_url(self, line: &str) -> Option<String> {
         let trimmed = line.trim();
         match self {
-            Self::TryCloudflare => {
-                trimmed.split_whitespace().find(|w| w.starts_with("https://") && w.contains("trycloudflare.com")).map(|w| w.trim_end_matches(',').to_string())
-            }
-            Self::LocalhostRun => {
-                trimmed.split_whitespace().find(|w| {
+            Self::TryCloudflare => trimmed
+                .split_whitespace()
+                .find(|w| w.starts_with("https://") && w.contains("trycloudflare.com"))
+                .map(|w| w.trim_end_matches(',').to_string()),
+            Self::LocalhostRun => trimmed
+                .split_whitespace()
+                .find(|w| {
                     (w.starts_with("https://") || w.starts_with("http://"))
                         && w.contains("lhr.life")
-                }).map(|w| w.trim_end_matches(',').to_string())
-            }
-            Self::Localtunnel => {
-                trimmed.split_whitespace().find(|w| (w.starts_with("https://") || w.starts_with("http://")) && (w.contains("loca.lt") || w.contains("localtunnel.me"))).map(|w| w.trim_end_matches(',').to_string())
-            }
+                })
+                .map(|w| w.trim_end_matches(',').to_string()),
+            Self::Localtunnel => trimmed
+                .split_whitespace()
+                .find(|w| {
+                    (w.starts_with("https://") || w.starts_with("http://"))
+                        && (w.contains("loca.lt") || w.contains("localtunnel.me"))
+                })
+                .map(|w| w.trim_end_matches(',').to_string()),
         }
     }
 }
 
 pub fn parse_url_any(line: &str) -> Option<String> {
     let trimmed = line.trim();
-    for provider in [Provider::TryCloudflare, Provider::LocalhostRun, Provider::Localtunnel] {
+    for provider in [
+        Provider::TryCloudflare,
+        Provider::LocalhostRun,
+        Provider::Localtunnel,
+    ] {
         if let Some(url) = provider.parse_url(trimmed) {
             return Some(url);
         }
@@ -127,8 +144,8 @@ pub async fn run_tunnel(
     port: u16,
     tx: mpsc::Sender<String>,
 ) -> Result<Option<String>, String> {
-    let provider = Provider::from_str(provider)
-        .ok_or_else(|| format!("Unknown provider: {}", provider))?;
+    let provider =
+        Provider::from_str(provider).ok_or_else(|| format!("Unknown provider: {}", provider))?;
 
     let bin_name = provider.binary_name();
     let bin_path = match which(bin_name) {
@@ -145,15 +162,29 @@ pub async fn run_tunnel(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to start {}: {}", bin_name, e))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start {}: {}", bin_name, e))?;
 
     let stdout = child.stdout.take().ok_or("missing stdout")?;
     let stderr = child.stderr.take().ok_or("missing stderr")?;
 
     let url_found = Arc::new(Mutex::new(None::<String>));
 
-    let stdout_task = tokio::spawn(stream_lines(stdout, tx.clone(), provider, url_found.clone(), true));
-    let stderr_task = tokio::spawn(stream_lines(stderr, tx.clone(), provider, url_found.clone(), false));
+    let stdout_task = tokio::spawn(stream_lines(
+        stdout,
+        tx.clone(),
+        provider,
+        url_found.clone(),
+        true,
+    ));
+    let stderr_task = tokio::spawn(stream_lines(
+        stderr,
+        tx.clone(),
+        provider,
+        url_found.clone(),
+        false,
+    ));
 
     let _ = futures_util::future::join(stdout_task, stderr_task).await;
 
@@ -170,8 +201,8 @@ pub async fn run_tunnel_owned(
     tx: mpsc::Sender<String>,
     child_out: Arc<TokioMutex<Option<tokio::process::Child>>>,
 ) -> Result<Option<String>, String> {
-    let provider = Provider::from_str(provider)
-        .ok_or_else(|| format!("Unknown provider: {}", provider))?;
+    let provider =
+        Provider::from_str(provider).ok_or_else(|| format!("Unknown provider: {}", provider))?;
 
     let bin_name = provider.binary_name();
     let bin_path = match which(bin_name) {
@@ -188,7 +219,9 @@ pub async fn run_tunnel_owned(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to start {}: {}", bin_name, e))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start {}: {}", bin_name, e))?;
 
     // Store child so caller can keep it alive
     {
@@ -197,15 +230,31 @@ pub async fn run_tunnel_owned(
     }
 
     // We need the child back to read stdout/stderr
-    let mut child = child_out.lock().await.take().ok_or("child missing after spawn")?;
+    let mut child = child_out
+        .lock()
+        .await
+        .take()
+        .ok_or("child missing after spawn")?;
 
     let stdout = child.stdout.take().ok_or("missing stdout")?;
     let stderr = child.stderr.take().ok_or("missing stderr")?;
 
     let url_found = Arc::new(Mutex::new(None::<String>));
 
-    let stdout_task = tokio::spawn(stream_lines(stdout, tx.clone(), provider, url_found.clone(), true));
-    let stderr_task = tokio::spawn(stream_lines(stderr, tx.clone(), provider, url_found.clone(), false));
+    let stdout_task = tokio::spawn(stream_lines(
+        stdout,
+        tx.clone(),
+        provider,
+        url_found.clone(),
+        true,
+    ));
+    let stderr_task = tokio::spawn(stream_lines(
+        stderr,
+        tx.clone(),
+        provider,
+        url_found.clone(),
+        false,
+    ));
 
     let _ = futures_util::future::join(stdout_task, stderr_task).await;
 
@@ -221,8 +270,8 @@ pub async fn run_tunnel_owned(
 }
 
 pub async fn install_provider(provider: &str) -> Result<String, String> {
-    let provider = Provider::from_str(provider)
-        .ok_or_else(|| format!("Unknown provider: {}", provider))?;
+    let provider =
+        Provider::from_str(provider).ok_or_else(|| format!("Unknown provider: {}", provider))?;
 
     match provider {
         Provider::TryCloudflare => Err(

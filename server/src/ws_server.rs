@@ -358,7 +358,9 @@ pub struct PortForwardState {
 
 impl PortForwardState {
     pub fn new() -> Self {
-        Self { forwards: tokio::sync::Mutex::new(HashMap::new()) }
+        Self {
+            forwards: tokio::sync::Mutex::new(HashMap::new()),
+        }
     }
 
     pub async fn stop(&self, id: &str) -> bool {
@@ -474,7 +476,17 @@ pub async fn start(
         let code_vault = code_vault.clone();
         let http_request = http_request.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, pty, chat_tracker, agent_servers, token, port_forward, code_vault, http_request).await
+            if let Err(e) = handle_connection(
+                stream,
+                pty,
+                chat_tracker,
+                agent_servers,
+                token,
+                port_forward,
+                code_vault,
+                http_request,
+            )
+            .await
             {
                 eprintln!("[NoIDE] WS connection error: {}", e);
             }
@@ -1599,7 +1611,9 @@ async fn spawn_port_forward_binary(
     let id = {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        let hex: String = (0..8).map(|_| format!("{:x}", rng.gen::<u8>() % 16)).collect();
+        let hex: String = (0..8)
+            .map(|_| format!("{:x}", rng.gen::<u8>() % 16))
+            .collect();
         format!("pf-{}", hex)
     };
 
@@ -1609,7 +1623,9 @@ async fn spawn_port_forward_binary(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
-    let child = cmd.spawn().map_err(|e| format!("Failed to start port-forward: {}", e))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start port-forward: {}", e))?;
 
     // Register the child so it can be stopped later.
     state.forwards.lock().await.insert(id.clone(), child);
@@ -1738,7 +1754,11 @@ async fn spawn_port_forward_binary(
 
 /// Locate the standalone `port-forward` binary on PATH.
 fn find_port_forward_binary() -> Option<std::path::PathBuf> {
-    let exe = if std::cfg!(windows) { "port-forward.exe" } else { "port-forward" };
+    let exe = if std::cfg!(windows) {
+        "port-forward.exe"
+    } else {
+        "port-forward"
+    };
 
     // 1. Check PATH first.
     if let Some(path_env) = std::env::var_os("PATH") {
@@ -1768,7 +1788,11 @@ fn find_port_forward_binary() -> Option<std::path::PathBuf> {
 
 /// Check if `port-forward` is on PATH (excluding local dev builds).
 fn is_port_forward_on_path() -> bool {
-    let exe = if std::cfg!(windows) { "port-forward.exe" } else { "port-forward" };
+    let exe = if std::cfg!(windows) {
+        "port-forward.exe"
+    } else {
+        "port-forward"
+    };
     if let Some(path_env) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path_env) {
             let candidate = dir.join(exe);
@@ -1801,12 +1825,19 @@ async fn install_port_forward_command(force: bool) -> Result<Value, String> {
     // --- Remote install --------------------------------------------------------
     let remote_result = install_port_forward_remote().await;
     if let Ok(val) = &remote_result {
-        if val.get("installed").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if val
+            .get("installed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
             return remote_result;
         }
     }
     let remote_err = remote_result.err().unwrap_or_default();
-    eprintln!("[port-forward] remote install failed: {}. Trying local build…", remote_err);
+    eprintln!(
+        "[port-forward] remote install failed: {}. Trying local build…",
+        remote_err
+    );
 
     // --- Local fallback --------------------------------------------------------
     install_port_forward_local().await
@@ -1819,7 +1850,12 @@ async fn install_port_forward_remote() -> Result<Value, String> {
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
 
     let curl_output = tokio::process::Command::new("curl")
-        .args(["-fsSL", install_url, "-o", script_path.to_str().unwrap_or("")])
+        .args([
+            "-fsSL",
+            install_url,
+            "-o",
+            script_path.to_str().unwrap_or(""),
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
@@ -1843,7 +1879,11 @@ async fn install_port_forward_remote() -> Result<Value, String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let combined = if stderr.is_empty() { stdout } else { format!("{}\n{}", stdout, stderr) };
+    let combined = if stderr.is_empty() {
+        stdout
+    } else {
+        format!("{}\n{}", stdout, stderr)
+    };
 
     if output.status.success() && find_port_forward_binary().is_some() {
         Ok(json!({ "installed": true, "output": combined }))
@@ -1856,7 +1896,9 @@ async fn install_port_forward_local() -> Result<Value, String> {
     use std::process::Stdio;
 
     let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let project_root = server_dir.parent().ok_or_else(|| "cannot locate project root".to_string())?;
+    let project_root = server_dir
+        .parent()
+        .ok_or_else(|| "cannot locate project root".to_string())?;
     let port_forward_dir = project_root.join("port-forward");
 
     if !port_forward_dir.join("Cargo.toml").exists() {
@@ -1872,7 +1914,11 @@ async fn install_port_forward_local() -> Result<Value, String> {
         .unwrap_or_else(|| std::path::PathBuf::from("cargo"));
 
     let output = tokio::process::Command::new(&cargo)
-        .args(["install", "--path", port_forward_dir.to_str().unwrap_or("port-forward")])
+        .args([
+            "install",
+            "--path",
+            port_forward_dir.to_str().unwrap_or("port-forward"),
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
@@ -1882,7 +1928,11 @@ async fn install_port_forward_local() -> Result<Value, String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let combined = if stderr.is_empty() { stdout } else { format!("{}\n{}", stdout, stderr) };
+    let combined = if stderr.is_empty() {
+        stdout
+    } else {
+        format!("{}\n{}", stdout, stderr)
+    };
 
     if output.status.success() && find_port_forward_binary().is_some() {
         Ok(json!({ "installed": true, "output": combined }))
@@ -1892,7 +1942,11 @@ async fn install_port_forward_local() -> Result<Value, String> {
 }
 
 async fn uninstall_port_forward_command() -> Result<Value, String> {
-    let exe = if std::cfg!(windows) { "port-forward.exe" } else { "port-forward" };
+    let exe = if std::cfg!(windows) {
+        "port-forward.exe"
+    } else {
+        "port-forward"
+    };
     let path_env = std::env::var_os("PATH").ok_or("PATH not set")?;
     let mut removed = false;
     for dir in std::env::split_paths(&path_env) {
@@ -1914,7 +1968,11 @@ async fn uninstall_port_forward_command() -> Result<Value, String> {
 // ── Code Vault ─────────────────────────────────────────────────────────────
 
 fn is_code_vault_on_path() -> bool {
-    let exe = if std::cfg!(windows) { "code-vault.exe" } else { "code-vault" };
+    let exe = if std::cfg!(windows) {
+        "code-vault.exe"
+    } else {
+        "code-vault"
+    };
     if let Some(path_env) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path_env) {
             if dir.join(exe).is_file() {
@@ -1926,7 +1984,11 @@ fn is_code_vault_on_path() -> bool {
 }
 
 fn find_code_vault_binary() -> Option<std::path::PathBuf> {
-    let exe = if std::cfg!(windows) { "code-vault.exe" } else { "code-vault" };
+    let exe = if std::cfg!(windows) {
+        "code-vault.exe"
+    } else {
+        "code-vault"
+    };
     if let Some(path_env) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path_env) {
             let candidate = dir.join(exe);
@@ -1958,12 +2020,19 @@ async fn install_code_vault_command(force: bool) -> Result<Value, String> {
     }
     let remote_result = install_code_vault_remote().await;
     if let Ok(val) = &remote_result {
-        if val.get("installed").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if val
+            .get("installed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
             return remote_result;
         }
     }
     let remote_err = remote_result.err().unwrap_or_default();
-    eprintln!("[code-vault] remote install failed: {}. Trying local build…", remote_err);
+    eprintln!(
+        "[code-vault] remote install failed: {}. Trying local build…",
+        remote_err
+    );
     install_code_vault_local().await
 }
 
@@ -1972,19 +2041,37 @@ async fn install_code_vault_remote() -> Result<Value, String> {
     let install_url = "https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh";
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
     let curl_output = tokio::process::Command::new("curl")
-        .args(["-fsSL", install_url, "-o", script_path.to_str().unwrap_or("")])
-        .stdout(Stdio::piped()).stderr(Stdio::piped())
-        .kill_on_drop(true).output().await
+        .args([
+            "-fsSL",
+            install_url,
+            "-o",
+            script_path.to_str().unwrap_or(""),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .output()
+        .await
         .map_err(|e| format!("Failed to download install.sh: {}", e))?;
     if !curl_output.status.success() {
-        return Err(format!("Failed to download install.sh: {}", String::from_utf8_lossy(&curl_output.stderr)));
+        return Err(format!(
+            "Failed to download install.sh: {}",
+            String::from_utf8_lossy(&curl_output.stderr)
+        ));
     }
     let output = tokio::process::Command::new("bash")
         .args([script_path.to_str().unwrap_or(""), "--code-vault"])
-        .stdout(Stdio::piped()).stderr(Stdio::piped())
-        .kill_on_drop(true).output().await
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .output()
+        .await
         .map_err(|e| format!("Failed to run install.sh: {}", e))?;
-    let combined = format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     if output.status.success() && find_code_vault_binary().is_some() {
         Ok(json!({ "installed": true, "output": combined }))
     } else {
@@ -1995,19 +2082,32 @@ async fn install_code_vault_remote() -> Result<Value, String> {
 async fn install_code_vault_local() -> Result<Value, String> {
     use std::process::Stdio;
     let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let project_root = server_dir.parent().ok_or_else(|| "cannot locate project root".to_string())?;
+    let project_root = server_dir
+        .parent()
+        .ok_or_else(|| "cannot locate project root".to_string())?;
     let cv_dir = project_root.join("code-vault");
     if !cv_dir.join("Cargo.toml").exists() {
-        return Err(format!("Local code-vault source not found at {}", cv_dir.display()));
+        return Err(format!(
+            "Local code-vault source not found at {}",
+            cv_dir.display()
+        ));
     }
-    let cargo = std::env::var_os("CARGO").map(std::path::PathBuf::from)
+    let cargo = std::env::var_os("CARGO")
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("cargo"));
     let output = tokio::process::Command::new(&cargo)
         .args(["install", "--path", cv_dir.to_str().unwrap_or("code-vault")])
-        .stdout(Stdio::piped()).stderr(Stdio::piped())
-        .kill_on_drop(true).output().await
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .output()
+        .await
         .map_err(|e| format!("Failed to run cargo install: {}", e))?;
-    let combined = format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     if output.status.success() && find_code_vault_binary().is_some() {
         Ok(json!({ "installed": true, "output": combined }))
     } else {
@@ -2024,14 +2124,20 @@ async fn start_code_vault_command(state: Arc<CodeVaultState>) -> Result<Value, S
             return Ok(json!({ "running": true, "port": port }));
         }
     }
-    let bin = find_code_vault_binary()
-        .ok_or_else(|| "code-vault binary not found. Install it from the Apps folder first.".to_string())?;
+    let bin = find_code_vault_binary().ok_or_else(|| {
+        "code-vault binary not found. Install it from the Apps folder first.".to_string()
+    })?;
     let mut cmd = tokio::process::Command::new(&bin);
     cmd.env("CODE_VAULT_ADDR", "127.0.0.1:0");
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     cmd.kill_on_drop(true);
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to start code-vault: {}", e))?;
-    let stdout = child.stdout.take().ok_or_else(|| "code-vault: missing stdout".to_string())?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start code-vault: {}", e))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "code-vault: missing stdout".to_string())?;
     use tokio::io::{AsyncBufReadExt, BufReader};
     let mut reader = BufReader::new(stdout).lines();
     let (port_tx, port_rx) = tokio::sync::oneshot::channel::<u16>();
@@ -2065,7 +2171,9 @@ async fn proxy_code_vault_request(
     body: Option<String>,
     state: Arc<CodeVaultState>,
 ) -> Result<Value, String> {
-    let port = state.port.lock().await.ok_or_else(|| "code-vault is not running. Start it from the Apps folder first.".to_string())?;
+    let port = state.port.lock().await.ok_or_else(|| {
+        "code-vault is not running. Start it from the Apps folder first.".to_string()
+    })?;
     let url = format!("http://127.0.0.1:{}{}", port, path);
     let client = reqwest::Client::new();
     let mut req = match method.to_uppercase().as_str() {
@@ -2077,8 +2185,14 @@ async fn proxy_code_vault_request(
     if let Some(b) = body {
         req = req.header("content-type", "application/json").body(b);
     }
-    let resp = req.send().await.map_err(|e| format!("code-vault request failed: {}", e))?;
-    let text = resp.text().await.map_err(|e| format!("code-vault response read failed: {}", e))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("code-vault request failed: {}", e))?;
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| format!("code-vault response read failed: {}", e))?;
     let json: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({ "raw": text }));
     Ok(json)
 }
@@ -2086,7 +2200,11 @@ async fn proxy_code_vault_request(
 // ── HTTP Request ──────────────────────────────────────────────────────────
 
 fn is_http_request_on_path() -> bool {
-    let exe = if std::cfg!(windows) { "http-request.exe" } else { "http-request" };
+    let exe = if std::cfg!(windows) {
+        "http-request.exe"
+    } else {
+        "http-request"
+    };
     if let Some(path_env) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path_env) {
             if dir.join(exe).is_file() {
@@ -2098,7 +2216,11 @@ fn is_http_request_on_path() -> bool {
 }
 
 fn find_http_request_binary() -> Option<std::path::PathBuf> {
-    let exe = if std::cfg!(windows) { "http-request.exe" } else { "http-request" };
+    let exe = if std::cfg!(windows) {
+        "http-request.exe"
+    } else {
+        "http-request"
+    };
     if let Some(path_env) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path_env) {
             let candidate = dir.join(exe);
@@ -2130,12 +2252,19 @@ async fn install_http_request_command(force: bool) -> Result<Value, String> {
     }
     let remote_result = install_http_request_remote().await;
     if let Ok(val) = &remote_result {
-        if val.get("installed").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if val
+            .get("installed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
             return remote_result;
         }
     }
     let remote_err = remote_result.err().unwrap_or_default();
-    eprintln!("[http-request] remote install failed: {}. Trying local build…", remote_err);
+    eprintln!(
+        "[http-request] remote install failed: {}. Trying local build…",
+        remote_err
+    );
     install_http_request_local().await
 }
 
@@ -2144,19 +2273,37 @@ async fn install_http_request_remote() -> Result<Value, String> {
     let install_url = "https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh";
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
     let curl_output = tokio::process::Command::new("curl")
-        .args(["-fsSL", install_url, "-o", script_path.to_str().unwrap_or("")])
-        .stdout(Stdio::piped()).stderr(Stdio::piped())
-        .kill_on_drop(true).output().await
+        .args([
+            "-fsSL",
+            install_url,
+            "-o",
+            script_path.to_str().unwrap_or(""),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .output()
+        .await
         .map_err(|e| format!("Failed to download install.sh: {}", e))?;
     if !curl_output.status.success() {
-        return Err(format!("Failed to download install.sh: {}", String::from_utf8_lossy(&curl_output.stderr)));
+        return Err(format!(
+            "Failed to download install.sh: {}",
+            String::from_utf8_lossy(&curl_output.stderr)
+        ));
     }
     let output = tokio::process::Command::new("bash")
         .args([script_path.to_str().unwrap_or(""), "--http-request"])
-        .stdout(Stdio::piped()).stderr(Stdio::piped())
-        .kill_on_drop(true).output().await
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .output()
+        .await
         .map_err(|e| format!("Failed to run install.sh: {}", e))?;
-    let combined = format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     if output.status.success() && find_http_request_binary().is_some() {
         Ok(json!({ "installed": true, "output": combined }))
     } else {
@@ -2167,19 +2314,36 @@ async fn install_http_request_remote() -> Result<Value, String> {
 async fn install_http_request_local() -> Result<Value, String> {
     use std::process::Stdio;
     let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let project_root = server_dir.parent().ok_or_else(|| "cannot locate project root".to_string())?;
+    let project_root = server_dir
+        .parent()
+        .ok_or_else(|| "cannot locate project root".to_string())?;
     let hr_dir = project_root.join("http-request");
     if !hr_dir.join("Cargo.toml").exists() {
-        return Err(format!("Local http-request source not found at {}", hr_dir.display()));
+        return Err(format!(
+            "Local http-request source not found at {}",
+            hr_dir.display()
+        ));
     }
-    let cargo = std::env::var_os("CARGO").map(std::path::PathBuf::from)
+    let cargo = std::env::var_os("CARGO")
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("cargo"));
     let output = tokio::process::Command::new(&cargo)
-        .args(["install", "--path", hr_dir.to_str().unwrap_or("http-request")])
-        .stdout(Stdio::piped()).stderr(Stdio::piped())
-        .kill_on_drop(true).output().await
+        .args([
+            "install",
+            "--path",
+            hr_dir.to_str().unwrap_or("http-request"),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .output()
+        .await
         .map_err(|e| format!("Failed to run cargo install: {}", e))?;
-    let combined = format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     if output.status.success() && find_http_request_binary().is_some() {
         Ok(json!({ "installed": true, "output": combined }))
     } else {
@@ -2196,14 +2360,20 @@ async fn start_http_request_command(state: Arc<HttpRequestState>) -> Result<Valu
             return Ok(json!({ "running": true, "port": port }));
         }
     }
-    let bin = find_http_request_binary()
-        .ok_or_else(|| "http-request binary not found. Install it from the Apps folder first.".to_string())?;
+    let bin = find_http_request_binary().ok_or_else(|| {
+        "http-request binary not found. Install it from the Apps folder first.".to_string()
+    })?;
     let mut cmd = tokio::process::Command::new(&bin);
     cmd.env("HTTP_REQUEST_ADDR", "127.0.0.1:0");
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     cmd.kill_on_drop(true);
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to start http-request: {}", e))?;
-    let stdout = child.stdout.take().ok_or_else(|| "http-request: missing stdout".to_string())?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start http-request: {}", e))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "http-request: missing stdout".to_string())?;
     use tokio::io::{AsyncBufReadExt, BufReader};
     let mut reader = BufReader::new(stdout).lines();
     let (port_tx, port_rx) = tokio::sync::oneshot::channel::<u16>();
@@ -2237,7 +2407,9 @@ async fn proxy_http_request_request(
     body: Option<String>,
     state: Arc<HttpRequestState>,
 ) -> Result<Value, String> {
-    let port = state.port.lock().await.ok_or_else(|| "http-request is not running. Start it from the Apps folder first.".to_string())?;
+    let port = state.port.lock().await.ok_or_else(|| {
+        "http-request is not running. Start it from the Apps folder first.".to_string()
+    })?;
     let url = format!("http://127.0.0.1:{}{}", port, path);
     let client = reqwest::Client::new();
     let mut req = match method.to_uppercase().as_str() {
@@ -2249,8 +2421,14 @@ async fn proxy_http_request_request(
     if let Some(b) = body {
         req = req.header("content-type", "application/json").body(b);
     }
-    let resp = req.send().await.map_err(|e| format!("http-request request failed: {}", e))?;
-    let text = resp.text().await.map_err(|e| format!("http-request response read failed: {}", e))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("http-request request failed: {}", e))?;
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| format!("http-request response read failed: {}", e))?;
     let json: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({ "raw": text }));
     Ok(json)
 }
@@ -2263,7 +2441,10 @@ async fn start_port_forward_web_command(
     let bin = match find_port_forward_binary() {
         Some(p) => p,
         None => {
-            return Err("port-forward binary is not installed. Install it from the Apps folder first.".into());
+            return Err(
+                "port-forward binary is not installed. Install it from the Apps folder first."
+                    .into(),
+            );
         }
     };
 
@@ -2291,7 +2472,9 @@ async fn start_port_forward_web_command(
         .stderr(Stdio::null())
         .kill_on_drop(false);
 
-    let child = cmd.spawn().map_err(|e| format!("Failed to start port-forward web UI: {}", e))?;
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start port-forward web UI: {}", e))?;
 
     {
         let mut guard = port_forward.forwards.lock().await;
@@ -2319,7 +2502,10 @@ async fn start_port_forward_web_command(
     }
 
     port_forward.stop("web").await;
-    Err(format!("port-forward web UI did not start listening on {}", addr))
+    Err(format!(
+        "port-forward web UI did not start listening on {}",
+        addr
+    ))
 }
 
 async fn stop_port_forward_web_command(
