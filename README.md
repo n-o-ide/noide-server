@@ -13,6 +13,7 @@ This repo also includes companion binaries:
 - **port-forward** — expose local ports via trycloudflare, localhost.run, or localtunnel
 - **code-vault** — save and manage code snippets with syntax highlighting
 - **http-request** — test APIs with folder organization and OpenAPI import
+- **file-manager** — browse, upload, download, and manage files via a local HTTP server
 
 **Contents**
 
@@ -21,6 +22,7 @@ This repo also includes companion binaries:
 - [Port Forward](#port-forward)
 - [Code Vault](#code-vault)
 - [HTTP Request](#http-request)
+- [File Manager](#file-manager)
 - [Pair the NoIDE app](#pair-the-noide-app)
 - [Connect over the internet (wss)](#connect-over-the-internet-wss)
 - [Security](#security)
@@ -77,7 +79,7 @@ Other install options:
 
 ```bash
 # Pin a specific version
-VERSION=0.3.5 bash install.sh
+VERSION=0.3.8 bash install.sh
 
 # Dry run: print what would happen without installing
 bash install.sh --dry-run
@@ -90,6 +92,9 @@ bash install.sh --code-vault
 
 # Install http-request only
 bash install.sh --http-request
+
+# Install file-manager only
+bash install.sh --file-manager
 
 # Install all binaries
 bash install.sh --all
@@ -149,6 +154,10 @@ verified", remove the quarantine attribute once:
 
 ```bash
 xattr -d com.apple.quarantine "$(command -v noide-server)"
+xattr -d com.apple.quarantine "$(command -v port-forward)"
+xattr -d com.apple.quarantine "$(command -v code-vault)"
+xattr -d com.apple.quarantine "$(command -v http-request)"
+xattr -d com.apple.quarantine "$(command -v file-manager)"
 ```
 
 <a name="windows-note"></a>
@@ -347,6 +356,48 @@ HTTP Request exposes a REST API on localhost:
 
 ---
 
+## File Manager
+
+**file-manager** is a companion binary for browsing, uploading, downloading,
+and managing files on the server. It runs as a local HTTP server and is
+accessed through the NoIDE app's File Manager feature.
+
+### Install
+
+```bash
+# Install file-manager only
+bash install.sh --file-manager
+
+# Or install all binaries
+bash install.sh --all
+```
+
+### Features
+
+- Browse the server's filesystem with directory listing
+- Upload files from the client to the server
+- Download files from the server to the client
+- Create, rename, and delete files and directories
+- MIME type detection for served files
+- CORS support for cross-origin access
+
+### API
+
+File Manager exposes a REST API on localhost:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/list?path=…` | List directory contents |
+| GET | `/read?path=…` | Read a file |
+| POST | `/write` | Write/create a file |
+| POST | `/mkdir` | Create a directory |
+| POST | `/rename` | Rename a file or directory |
+| POST | `/delete` | Delete a file or directory |
+| POST | `/upload` | Upload a file (multipart) |
+| GET | `/download?path=…` | Download a file |
+
+---
+
 ## Pair the NoIDE app
 
 1. Start the server and keep the terminal visible:
@@ -457,7 +508,7 @@ Then connect the app to `wss://your-url` and pair as usual.
 curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
 
 # Specific version
-VERSION=0.3.5 bash install.sh
+VERSION=0.3.8 bash install.sh
 
 # Upgrade all binaries
 bash install.sh --all
@@ -471,14 +522,15 @@ update too (see below).
 
 ## Build from source
 
-This repo is a Cargo workspace with four crates:
+This repo is a Cargo workspace with five crates:
 
 ```
 noide-server/
 ├── server/          # noide-server binary
 ├── port-forward/    # port-forward binary
 ├── code-vault/      # code-vault binary
-└── http-request/    # http-request binary
+├── http-request/    # http-request binary
+└── file-manager/    # file-manager binary
 ```
 
 ```bash
@@ -493,6 +545,7 @@ cargo build --release -p noide-server
 cargo build --release -p port-forward
 cargo build --release -p code-vault
 cargo build --release -p http-request
+cargo build --release -p file-manager
 ```
 
 Binaries are in `target/release/`. Requires a Rust toolchain. Release builds

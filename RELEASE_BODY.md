@@ -1,29 +1,21 @@
-## v0.3.5 — Code Vault and HTTP Request
+## v0.3.8 — File Manager
 
-Adds two new standalone binaries: **code-vault** for saving and managing code
-snippets with syntax highlighting, and **http-request** for testing APIs with
-folder organization and OpenAPI import. Both run as local HTTP servers
-proxied through noide-server, following the same pattern as port-forward.
+Adds a new standalone binary: **file-manager** for browsing, uploading,
+downloading, and managing files on the server via a local HTTP server.
 
 ### Highlights
 
-- **Code Vault.** A new `code-vault` binary for saving, organizing, and
-  editing code snippets with syntax highlighting (via CodeMirror). Features
-  include JSON import/export, folder organization, and a full-text search
-  interface. Install with `bash install.sh --code-vault` or `bash install.sh --all`.
-- **HTTP Request.** A new `http-request` binary for testing REST APIs.
-  Supports all HTTP methods, custom headers, JSON/text bodies, request
-  history with folder organization, and OpenAPI spec import. Install with
-  `bash install.sh --http-request` or `bash install.sh --all`.
-- **OpenAPI Import.** Import API endpoints from OpenAPI/Swagger specs
-  directly into http-request. Endpoints are organized by tags into folders,
-  with sample request bodies generated from schemas.
-- **Collection Export/Import.** Both code-vault and http-request support
-  exporting and importing collections as JSON files for backup and sharing.
-- **New commands.** `check_code_vault`, `install_code_vault`,
-  `start_code_vault`, `stop_code_vault`, `code_vault_request`,
-  `check_http_request`, `install_http_request`, `start_http_request`,
-  `stop_http_request`, `http_request_request`.
+- **File Manager.** A new `file-manager` binary for browsing, uploading,
+  downloading, and managing files on the server. Features include directory
+  listing, file read/write, rename, delete, and MIME type detection.
+  Install with `bash install.sh --file-manager` or `bash install.sh --all`.
+- **Improved folder browser.** The Open Folder dialog now defaults to `/` on
+  first launch and handles directory listing errors gracefully (e.g.
+  permission-denied subdirectories no longer break the entire listing).
+- **Go-to-definition fix.** Ctrl+click navigation to definitions in other
+  files now scrolls to the correct line.
+- **Git panel.** Stage/Discard/Diff action buttons are now always visible
+  on each changed file row (no hover required).
 
 ### Install (upgraded)
 
@@ -32,7 +24,7 @@ curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.s
 ```
 
 Re-running upgrades you to the newest release. Pin a version with
-`VERSION=0.3.5`.
+`VERSION=0.3.8`.
 
 To install all binaries:
 
@@ -43,8 +35,10 @@ bash install.sh --all
 Or install individually:
 
 ```bash
+bash install.sh --port-forward
 bash install.sh --code-vault
 bash install.sh --http-request
+bash install.sh --file-manager
 ```
 
 #### Windows note
@@ -63,6 +57,7 @@ xattr -d com.apple.quarantine "$(command -v noide-server)"
 xattr -d com.apple.quarantine "$(command -v port-forward)"
 xattr -d com.apple.quarantine "$(command -v code-vault)"
 xattr -d com.apple.quarantine "$(command -v http-request)"
+xattr -d com.apple.quarantine "$(command -v file-manager)"
 ```
 
 ### Run
@@ -106,13 +101,18 @@ already have a `wss://` path.
 | `http-request-darwin-x86_64` | macOS (Intel) |
 | `http-request-darwin-aarch64` | macOS (Apple Silicon) |
 | `http-request-windows-x86_64.exe` | Windows (x86_64) |
+| `file-manager-linux-x86_64` | Linux (Intel/AMD) |
+| `file-manager-linux-aarch64` | Linux (ARM64) |
+| `file-manager-darwin-x86_64` | macOS (Intel) |
+| `file-manager-darwin-aarch64` | macOS (Apple Silicon) |
+| `file-manager-windows-x86_64.exe` | Windows (x86_64) |
 | `SHA256SUMS` | Checksums for all binaries |
 
 Install a downloaded binary manually:
 
 ```bash
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.5/noide-server-linux-x86_64
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.5/SHA256SUMS
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.8/noide-server-linux-x86_64
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.8/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/
 ```

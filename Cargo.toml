@@ -1,5 +1,5 @@
 [workspace]
-members = ["server", "port-forward"]
+members = ["server", "port-forward", "file-manager"]
 resolver = "2"
 
 [workspace.package]

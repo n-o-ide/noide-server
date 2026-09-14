@@ -1,8 +1,9 @@
 #!/bin/sh
 # NoIDE installer
 #
-# Downloads noide-server and/or port-forward binaries for your OS/arch from the
-# latest GitHub release, verifies their SHA-256 checksum, and installs them.
+# Downloads noide-server, port-forward, code-vault, http-request, and/or
+# file-manager binaries for your OS/arch from the latest GitHub release,
+# verifies their SHA-256 checksum, and installs them.
 # Re-running the script upgrades to the newest version.
 #
 # Usage:
@@ -15,6 +16,7 @@
 #   bash install.sh --port-forward         Install port-forward only
 #   bash install.sh --code-vault           Install code-vault only
 #   bash install.sh --http-request         Install http-request only
+#   bash install.sh --file-manager         Install file-manager only
 #   bash install.sh --all                  Install all binaries
 #
 # Environment:
@@ -30,10 +32,11 @@ INSTALL_SERVER=1
 INSTALL_PORT_FORWARD=0
 INSTALL_CODE_VAULT=0
 INSTALL_HTTP_REQUEST=0
+INSTALL_FILE_MANAGER=0
 
 usage() {
-  echo "Usage: bash install.sh [--dry-run] [--force] [--port-forward] [--code-vault] [--http-request] [--all]"
-  echo "       VERSION=x.y.z bash install.sh [--dry-run] [--force] [--port-forward] [--code-vault] [--http-request] [--all]"
+  echo "Usage: bash install.sh [--dry-run] [--force] [--port-forward] [--code-vault] [--http-request] [--file-manager] [--all]"
+  echo "       VERSION=x.y.z bash install.sh [--dry-run] [--force] [--port-forward] [--code-vault] [--http-request] [--file-manager] [--all]"
 }
 
 for arg in "$@"; do
@@ -43,7 +46,8 @@ for arg in "$@"; do
     --port-forward) INSTALL_SERVER=0; INSTALL_PORT_FORWARD=1 ;;
     --code-vault) INSTALL_SERVER=0; INSTALL_CODE_VAULT=1 ;;
     --http-request) INSTALL_SERVER=0; INSTALL_HTTP_REQUEST=1 ;;
-    --all) INSTALL_SERVER=1; INSTALL_PORT_FORWARD=1; INSTALL_CODE_VAULT=1; INSTALL_HTTP_REQUEST=1 ;;
+    --file-manager) INSTALL_SERVER=0; INSTALL_FILE_MANAGER=1 ;;
+    --all) INSTALL_SERVER=1; INSTALL_PORT_FORWARD=1; INSTALL_CODE_VAULT=1; INSTALL_HTTP_REQUEST=1; INSTALL_FILE_MANAGER=1 ;;
     -h | --help) usage; exit 0 ;;
     *) echo "unknown option: $arg" >&2; usage >&2; exit 1 ;;
   esac
@@ -184,6 +188,10 @@ if [ "$INSTALL_HTTP_REQUEST" -eq 1 ]; then
   install_binary "http-request"
 fi
 
+if [ "$INSTALL_FILE_MANAGER" -eq 1 ]; then
+  install_binary "file-manager"
+fi
+
 # --- Post-install notes --------------------------------------------------------
 
 case ":$PATH:" in
@@ -205,5 +213,8 @@ if [ "$INSTALL_CODE_VAULT" -eq 1 ]; then
 fi
 if [ "$INSTALL_HTTP_REQUEST" -eq 1 ]; then
   echo "Start http-request with:  ${INSTALL_DIR}/http-request" >&2
+fi
+if [ "$INSTALL_FILE_MANAGER" -eq 1 ]; then
+  echo "Start file-manager with:  ${INSTALL_DIR}/file-manager" >&2
 fi
 echo "Re-run this installer any time to upgrade." >&2
