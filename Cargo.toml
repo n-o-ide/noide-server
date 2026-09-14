@@ -1,5 +1,5 @@
 [workspace]
-members = ["server", "port-forward"]
+members = ["server", "port-forward", "code-vault", "http-request"]
 resolver = "2"
 
 [workspace.package]
