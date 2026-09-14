@@ -1,4 +1,4 @@
-## v0.3.8 — File Manager
+## v0.3.10 — File Manager
 
 Adds a new standalone binary: **file-manager** for browsing, uploading,
 downloading, and managing files on the server via a local HTTP server.
@@ -37,7 +37,7 @@ curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.s
 ```
 
 Re-running upgrades you to the newest release. Pin a version with
-`VERSION=0.3.8`.
+`VERSION=0.3.10`.
 
 To install all binaries:
 
@@ -128,8 +128,8 @@ This release ships pre-built binaries for all four components — `noide-server`
 Install a downloaded binary manually:
 
 ```bash
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.8/noide-server-linux-x86_64
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.8/SHA256SUMS
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.10/noide-server-linux-x86_64
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.10/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/
 ```
