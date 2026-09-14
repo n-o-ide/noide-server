@@ -323,12 +323,13 @@ async fn delete_folder(
     Path(id): Path<i64>,
 ) -> Result<Json<serde_json::Value>, String> {
     let db = state.db.lock().await;
-    let deleted_requests = db.execute(
-        "DELETE FROM requests WHERE folder_id = ?1",
-        params![id],
-    )
-    .map_err(|e| e.to_string())?;
-    eprintln!("[delete-folder] id={} deleted_requests={}", id, deleted_requests);
+    let deleted_requests = db
+        .execute("DELETE FROM requests WHERE folder_id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    eprintln!(
+        "[delete-folder] id={} deleted_requests={}",
+        id, deleted_requests
+    );
     let affected = db
         .execute("DELETE FROM folders WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -603,7 +604,13 @@ async fn import_openapi(
             .and_then(|t| t.as_array())
             .and_then(|arr| arr.first())
             .and_then(|t| t.as_str())
-            .or_else(|| if api_title.is_empty() { None } else { Some(api_title) })
+            .or_else(|| {
+                if api_title.is_empty() {
+                    None
+                } else {
+                    Some(api_title)
+                }
+            })
             .unwrap_or("Imported");
         eprintln!("[import-openapi] path={:?} tag={:?}", path, tag);
 
@@ -664,12 +671,29 @@ async fn import_openapi(
                         let pname = param_obj.get("name").and_then(|n| n.as_str()).unwrap_or("");
                         let pin = param_obj.get("in").and_then(|i| i.as_str()).unwrap_or("");
                         // Resolve $ref inside the parameter's own schema
-                        let param_schema = param_obj.get("schema").map(|s| resolve_schema_ref(spec, s));
+                        let param_schema =
+                            param_obj.get("schema").map(|s| resolve_schema_ref(spec, s));
                         // Prefer example > default > first enum > empty
-                        let pval = param_obj.get("example").and_then(|v| v.as_str())
-                            .or_else(|| param_schema.and_then(|s| s.get("example")).and_then(|v| v.as_str()))
-                            .or_else(|| param_schema.and_then(|s| s.get("default")).and_then(|v| v.as_str()))
-                            .or_else(|| param_schema.and_then(|s| s.get("enum")).and_then(|e| e.as_array()).and_then(|a| a.first()).and_then(|v| v.as_str()))
+                        let pval = param_obj
+                            .get("example")
+                            .and_then(|v| v.as_str())
+                            .or_else(|| {
+                                param_schema
+                                    .and_then(|s| s.get("example"))
+                                    .and_then(|v| v.as_str())
+                            })
+                            .or_else(|| {
+                                param_schema
+                                    .and_then(|s| s.get("default"))
+                                    .and_then(|v| v.as_str())
+                            })
+                            .or_else(|| {
+                                param_schema
+                                    .and_then(|s| s.get("enum"))
+                                    .and_then(|e| e.as_array())
+                                    .and_then(|a| a.first())
+                                    .and_then(|v| v.as_str())
+                            })
                             .unwrap_or("")
                             .to_string();
                         match pin {
@@ -681,8 +705,11 @@ async fn import_openapi(
                 }
                 // Append query params to URL
                 if !query_pairs.is_empty() {
-                    let qs: String = query_pairs.iter()
-                        .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
+                    let qs: String = query_pairs
+                        .iter()
+                        .map(|(k, v)| {
+                            format!("{}={}", urlencoding::encode(k), urlencoding::encode(v))
+                        })
                         .collect::<Vec<_>>()
                         .join("&");
                     url = format!("{}?{}", url, qs);
@@ -691,7 +718,8 @@ async fn import_openapi(
                 let headers_json = if header_pairs.is_empty() {
                     "[]".to_string()
                 } else {
-                    let pairs: Vec<serde_json::Value> = header_pairs.iter()
+                    let pairs: Vec<serde_json::Value> = header_pairs
+                        .iter()
                         .map(|(k, v)| serde_json::json!({ "key": k, "value": v }))
                         .collect();
                     serde_json::to_string(&pairs).unwrap_or_else(|_| "[]".to_string())
@@ -707,7 +735,9 @@ async fn import_openapi(
                             } else {
                                 String::new()
                             }
-                        } else if let Some(form_content) = content.get("application/x-www-form-urlencoded") {
+                        } else if let Some(form_content) =
+                            content.get("application/x-www-form-urlencoded")
+                        {
                             if let Some(schema) = form_content.get("schema") {
                                 let resolved = resolve_schema_ref(spec, schema);
                                 generate_form_urlencoded_body(spec, resolved).unwrap_or_default()
@@ -715,7 +745,9 @@ async fn import_openapi(
                                 String::new()
                             }
                         } else if let Some(text_content) = content.get("text/plain") {
-                            if let Some(example) = text_content.get("example").and_then(|e| e.as_str()) {
+                            if let Some(example) =
+                                text_content.get("example").and_then(|e| e.as_str())
+                            {
                                 example.to_string()
                             } else if let Some(schema) = text_content.get("schema") {
                                 let resolved = resolve_schema_ref(spec, schema);
@@ -761,7 +793,10 @@ fn resolve_ref<'a>(spec: &'a serde_json::Value, ref_value: &str) -> Option<&'a s
 }
 
 /// Resolve schema `$ref` if present; otherwise return the schema as-is.
-fn resolve_schema_ref<'a>(spec: &'a serde_json::Value, schema: &'a serde_json::Value) -> &'a serde_json::Value {
+fn resolve_schema_ref<'a>(
+    spec: &'a serde_json::Value,
+    schema: &'a serde_json::Value,
+) -> &'a serde_json::Value {
     if let Some(ref_value) = schema.get("$ref").and_then(|r| r.as_str()) {
         if let Some(resolved) = resolve_ref(spec, ref_value) {
             return resolved;
@@ -771,13 +806,19 @@ fn resolve_schema_ref<'a>(spec: &'a serde_json::Value, schema: &'a serde_json::V
 }
 
 /// Generate a simple sample body from a JSON Schema
-fn generate_sample_body<'a>(spec: &'a serde_json::Value, schema: &'a serde_json::Value) -> Option<String> {
+fn generate_sample_body<'a>(
+    spec: &'a serde_json::Value,
+    schema: &'a serde_json::Value,
+) -> Option<String> {
     let obj = schema.as_object()?;
     let sample = generate_from_schema(spec, obj)?;
     serde_json::to_string_pretty(&sample).ok()
 }
 
-fn generate_form_urlencoded_body<'a>(spec: &'a serde_json::Value, schema: &'a serde_json::Value) -> Option<String> {
+fn generate_form_urlencoded_body<'a>(
+    spec: &'a serde_json::Value,
+    schema: &'a serde_json::Value,
+) -> Option<String> {
     let obj = schema.as_object()?;
     let mut pairs = Vec::new();
     if let Some(props) = obj.get("properties").and_then(|p| p.as_object()) {
@@ -795,7 +836,11 @@ fn generate_form_urlencoded_body<'a>(spec: &'a serde_json::Value, schema: &'a se
                 match r#type {
                     "string" => {
                         if let Some(values) = resolved.get("enum").and_then(|e| e.as_array()) {
-                            values.first().and_then(|v| v.as_str()).unwrap_or("").to_string()
+                            values
+                                .first()
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string()
                         } else {
                             String::new()
                         }
@@ -807,7 +852,11 @@ fn generate_form_urlencoded_body<'a>(spec: &'a serde_json::Value, schema: &'a se
             } else {
                 String::new()
             };
-            pairs.push(format!("{}={}", urlencoding::encode(key), urlencoding::encode(&value)));
+            pairs.push(format!(
+                "{}={}",
+                urlencoding::encode(key),
+                urlencoding::encode(&value)
+            ));
         }
     }
     Some(pairs.join("&"))
@@ -833,7 +882,12 @@ fn generate_from_schema(
                             if let Some(val) = generate_from_schema(spec, prop_obj) {
                                 map.insert(key.clone(), val);
                             }
-                        } else if resolved.is_array() || resolved.is_string() || resolved.is_number() || resolved.is_boolean() || resolved.is_null() {
+                        } else if resolved.is_array()
+                            || resolved.is_string()
+                            || resolved.is_number()
+                            || resolved.is_boolean()
+                            || resolved.is_null()
+                        {
                             // Primitive $ref that resolved to a bare value — skip
                         }
                     }
@@ -858,7 +912,10 @@ fn generate_from_schema(
             }
             "string" => {
                 if let Some(values) = obj.get("enum").and_then(|e| e.as_array()) {
-                    values.first().cloned().unwrap_or(serde_json::Value::String(String::new()))
+                    values
+                        .first()
+                        .cloned()
+                        .unwrap_or(serde_json::Value::String(String::new()))
                 } else {
                     serde_json::Value::String(String::new())
                 }

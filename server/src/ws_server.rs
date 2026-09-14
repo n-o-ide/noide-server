@@ -2584,7 +2584,11 @@ async fn stop_port_forward_web_command(
 // ── File Manager ───────────────────────────────────────────────────────────
 
 fn is_file_manager_on_path() -> bool {
-    let exe = if std::cfg!(windows) { "file-manager.exe" } else { "file-manager" };
+    let exe = if std::cfg!(windows) {
+        "file-manager.exe"
+    } else {
+        "file-manager"
+    };
     if let Some(path_env) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path_env) {
             if dir.join(exe).is_file() {
@@ -2596,7 +2600,11 @@ fn is_file_manager_on_path() -> bool {
 }
 
 fn find_file_manager_binary() -> Option<std::path::PathBuf> {
-    let exe = if std::cfg!(windows) { "file-manager.exe" } else { "file-manager" };
+    let exe = if std::cfg!(windows) {
+        "file-manager.exe"
+    } else {
+        "file-manager"
+    };
     // 1. Check PATH
     if let Some(path_env) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path_env) {
@@ -2630,12 +2638,19 @@ async fn install_file_manager_command(force: bool) -> Result<Value, String> {
     }
     let remote_result = install_file_manager_remote().await;
     if let Ok(val) = &remote_result {
-        if val.get("installed").and_then(|v| v.as_bool()).unwrap_or(false) {
+        if val
+            .get("installed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
             return remote_result;
         }
     }
     let remote_err = remote_result.err().unwrap_or_default();
-    eprintln!("[file-manager] remote install failed: {}. Trying local build…", remote_err);
+    eprintln!(
+        "[file-manager] remote install failed: {}. Trying local build…",
+        remote_err
+    );
     install_file_manager_local().await
 }
 
@@ -2644,21 +2659,37 @@ async fn install_file_manager_remote() -> Result<Value, String> {
     let install_url = "https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh";
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
     let curl_output = tokio::process::Command::new("curl")
-        .args(["-fsSL", install_url, "-o", script_path.to_str().unwrap_or("")])
-        .stdout(Stdio::piped()).stderr(Stdio::piped())
-        .kill_on_drop(true).output().await
+        .args([
+            "-fsSL",
+            install_url,
+            "-o",
+            script_path.to_str().unwrap_or(""),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .output()
+        .await
         .map_err(|e| format!("Failed to download install.sh: {}", e))?;
     if !curl_output.status.success() {
-        return Err(format!("Failed to download install.sh: {}",
-            String::from_utf8_lossy(&curl_output.stderr)));
+        return Err(format!(
+            "Failed to download install.sh: {}",
+            String::from_utf8_lossy(&curl_output.stderr)
+        ));
     }
     let output = tokio::process::Command::new("bash")
         .args([script_path.to_str().unwrap_or(""), "--file-manager"])
-        .stdout(Stdio::piped()).stderr(Stdio::piped())
-        .kill_on_drop(true).output().await
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .output()
+        .await
         .map_err(|e| format!("Failed to run install.sh: {}", e))?;
-    let combined = format!("{}\n{}",
-        String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     if output.status.success() && find_file_manager_binary().is_some() {
         Ok(json!({ "installed": true, "output": combined }))
     } else {
@@ -2669,22 +2700,36 @@ async fn install_file_manager_remote() -> Result<Value, String> {
 async fn install_file_manager_local() -> Result<Value, String> {
     use std::process::Stdio;
     let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let project_root = server_dir.parent()
+    let project_root = server_dir
+        .parent()
         .ok_or_else(|| "cannot locate project root".to_string())?;
     let fm_dir = project_root.join("file-manager");
     if !fm_dir.join("Cargo.toml").exists() {
-        return Err(format!("Local file-manager source not found at {}", fm_dir.display()));
+        return Err(format!(
+            "Local file-manager source not found at {}",
+            fm_dir.display()
+        ));
     }
     let cargo = std::env::var_os("CARGO")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("cargo"));
     let output = tokio::process::Command::new(&cargo)
-        .args(["install", "--path", fm_dir.to_str().unwrap_or("file-manager")])
-        .stdout(Stdio::piped()).stderr(Stdio::piped())
-        .kill_on_drop(true).output().await
+        .args([
+            "install",
+            "--path",
+            fm_dir.to_str().unwrap_or("file-manager"),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .output()
+        .await
         .map_err(|e| format!("Failed to run cargo install: {}", e))?;
-    let combined = format!("{}\n{}",
-        String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     if output.status.success() && find_file_manager_binary().is_some() {
         Ok(json!({ "installed": true, "output": combined }))
     } else {
