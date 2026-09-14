@@ -1,11 +1,14 @@
-## v0.3.6 — Ship code-vault & http-request binaries
+## v0.3.7 — Ship code-vault & http-request binaries (CI-green)
 
 v0.3.5 documented the new `code-vault` and `http-request` binaries, but the
 release workflow only packaged `noide-server` and `port-forward` — the two new
 companion binaries were never actually built or attached to the release. v0.3.6
-fixes that: `code-vault` and `http-request` are now Cargo workspace members and
-are built, packaged, checksummed, and verified in the release for every supported
-platform.
+made them workspace members and wired them through the release pipeline, but the
+synced source failed `cargo fmt --check` and `cargo clippy -- -D warnings`, so CI
+never even reached the build step. v0.3.7 cleans up the source (fmt + the
+`redundant_closure` and `bind-instead-of-map` clippy lints) so the pipeline is
+fully green: all four binaries are now built, packaged, checksummed, and verified
+for every supported platform.
 
 ### Highlights
 
@@ -24,7 +27,8 @@ platform.
   exporting and importing collections as JSON files for backup and sharing.
 - **Release artifacts.** All four binaries — `noide-server`, `port-forward`,
   `code-vault`, and `http-request` — are now built and attached to every release,
-  with a `SHA256SUMS` manifest covering all of them.
+  with a `SHA256SUMS` manifest covering all of them. CI passes
+  `cargo fmt --check`, `cargo test`, and `cargo clippy -- -D warnings`.
 - **Cloudflare Quick Tunnel URL.** Now reported as `wss://` (the tunnel speaks
   WebSocket over the tunnel), so clients connect correctly.
 - **New commands.** `check_code_vault`, `install_code_vault`,
@@ -39,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.s
 ```
 
 Re-running upgrades you to the newest release. Pin a version with
-`VERSION=0.3.6`.
+`VERSION=0.3.7`.
 
 To install all binaries:
 
@@ -123,8 +127,8 @@ This release ships pre-built binaries for all four components — `noide-server`
 Install a downloaded binary manually:
 
 ```bash
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.6/noide-server-linux-x86_64
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.6/SHA256SUMS
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.7/noide-server-linux-x86_64
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.7/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/
 ```
