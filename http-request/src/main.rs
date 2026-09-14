@@ -112,7 +112,7 @@ struct AppState {
 
 fn db_path() -> std::path::PathBuf {
     let base = dirs_next::data_local_dir()
-        .or_else(|| dirs_next::data_dir())
+        .or_else(dirs_next::data_dir)
         .unwrap_or_else(|| std::path::PathBuf::from("."));
     base.join("noide").join("http-request.db")
 }
@@ -148,13 +148,13 @@ fn open_db() -> Connection {
     let has_folder_id: bool = conn
         .prepare("PRAGMA table_info(requests)")
         .ok()
-        .and_then(|mut stmt| {
+        .map(|mut stmt| {
             let cols: Vec<String> = stmt
                 .query_map([], |row| row.get::<_, String>(1))
                 .ok()
                 .map(|rows| rows.filter_map(|r| r.ok()).collect())
                 .unwrap_or_default();
-            Some(cols.iter().any(|col| col == "folder_id"))
+            cols.iter().any(|col| col == "folder_id")
         })
         .unwrap_or(false);
     if !has_folder_id {

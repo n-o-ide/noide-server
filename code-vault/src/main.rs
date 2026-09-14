@@ -51,7 +51,7 @@ struct AppState {
 
 fn db_path() -> std::path::PathBuf {
     let base = dirs_next::data_local_dir()
-        .or_else(|| dirs_next::data_dir())
+        .or_else(dirs_next::data_dir)
         .unwrap_or_else(|| std::path::PathBuf::from("."));
     base.join("noide").join("code-vault.db")
 }
