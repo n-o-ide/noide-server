@@ -70,8 +70,9 @@ fn open_db() -> Connection {
             content     TEXT NOT NULL DEFAULT '',
             created_at  TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-        );"
-    ).expect("failed to create snippets table");
+        );",
+    )
+    .expect("failed to create snippets table");
     conn
 }
 
@@ -221,7 +222,10 @@ async fn export_db() -> Result<impl IntoResponse, String> {
     Ok(Response::builder()
         .status(200)
         .header(header::CONTENT_TYPE, "application/x-sqlite3")
-        .header(header::CONTENT_DISPOSITION, "attachment; filename=\"code-vault.db\"")
+        .header(
+            header::CONTENT_DISPOSITION,
+            "attachment; filename=\"code-vault.db\"",
+        )
         .body(Body::from(data))
         .unwrap())
 }
@@ -285,7 +289,10 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health))
         .route("/snippets", get(list_snippets).post(create_snippet))
-        .route("/snippets/:id", get(get_snippet).put(update_snippet).delete(delete_snippet))
+        .route(
+            "/snippets/:id",
+            get(get_snippet).put(update_snippet).delete(delete_snippet),
+        )
         .route("/export", get(export_db))
         .route("/export/json", get(export_json))
         .route("/import", post(import_json))

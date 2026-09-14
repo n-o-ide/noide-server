@@ -140,8 +140,9 @@ fn open_db() -> Connection {
             folder_id   INTEGER,
             created_at  TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
-        );"
-    ).expect("failed to create tables");
+        );",
+    )
+    .expect("failed to create tables");
 
     // Add folder_id column if missing (migration for existing DBs)
     let has_folder_id: bool = conn
@@ -205,13 +206,21 @@ async fn send_http(
     req = req.timeout(timeout);
 
     let start = std::time::Instant::now();
-    let resp = req.send().await.map_err(|e| format!("Request failed: {}", e))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
     let elapsed = start.elapsed().as_millis() as u64;
 
     let status = resp.status().as_u16();
-    let status_text = resp.status().canonical_reason().unwrap_or("Unknown").to_string();
+    let status_text = resp
+        .status()
+        .canonical_reason()
+        .unwrap_or("Unknown")
+        .to_string();
 
-    let resp_headers: Vec<HeaderPair> = resp.headers()
+    let resp_headers: Vec<HeaderPair> = resp
+        .headers()
         .iter()
         .map(|(k, v)| HeaderPair {
             key: k.to_string(),
@@ -219,7 +228,10 @@ async fn send_http(
         })
         .collect();
 
-    let body = resp.text().await.map_err(|e| format!("Failed to read response: {}", e))?;
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
 
     Ok(Json(HttpResponse {
         status,
@@ -284,8 +296,11 @@ async fn update_folder(
 ) -> Result<Json<Folder>, String> {
     let db = state.db.lock().await;
     if let Some(ref name) = input.name {
-        db.execute("UPDATE folders SET name = ?1 WHERE id = ?2", params![name, id])
-            .map_err(|e| e.to_string())?;
+        db.execute(
+            "UPDATE folders SET name = ?1 WHERE id = ?2",
+            params![name, id],
+        )
+        .map_err(|e| e.to_string())?;
     }
     let folder = db
         .query_row(
@@ -308,8 +323,11 @@ async fn delete_folder(
     Path(id): Path<i64>,
 ) -> Result<Json<serde_json::Value>, String> {
     let db = state.db.lock().await;
-    db.execute("UPDATE requests SET folder_id = NULL WHERE folder_id = ?1", params![id])
-        .map_err(|e| e.to_string())?;
+    db.execute(
+        "UPDATE requests SET folder_id = NULL WHERE folder_id = ?1",
+        params![id],
+    )
+    .map_err(|e| e.to_string())?;
     let affected = db
         .execute("DELETE FROM folders WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -462,28 +480,46 @@ async fn update_request(
 ) -> Result<Json<SavedRequest>, String> {
     let db = state.db.lock().await;
     if let Some(ref name) = input.name {
-        db.execute("UPDATE requests SET name = ?1 WHERE id = ?2", params![name, id])
-            .map_err(|e| e.to_string())?;
+        db.execute(
+            "UPDATE requests SET name = ?1 WHERE id = ?2",
+            params![name, id],
+        )
+        .map_err(|e| e.to_string())?;
     }
     if let Some(ref method) = input.method {
-        db.execute("UPDATE requests SET method = ?1 WHERE id = ?2", params![method, id])
-            .map_err(|e| e.to_string())?;
+        db.execute(
+            "UPDATE requests SET method = ?1 WHERE id = ?2",
+            params![method, id],
+        )
+        .map_err(|e| e.to_string())?;
     }
     if let Some(ref url) = input.url {
-        db.execute("UPDATE requests SET url = ?1 WHERE id = ?2", params![url, id])
-            .map_err(|e| e.to_string())?;
+        db.execute(
+            "UPDATE requests SET url = ?1 WHERE id = ?2",
+            params![url, id],
+        )
+        .map_err(|e| e.to_string())?;
     }
     if let Some(ref headers) = input.headers {
-        db.execute("UPDATE requests SET headers = ?1 WHERE id = ?2", params![headers, id])
-            .map_err(|e| e.to_string())?;
+        db.execute(
+            "UPDATE requests SET headers = ?1 WHERE id = ?2",
+            params![headers, id],
+        )
+        .map_err(|e| e.to_string())?;
     }
     if let Some(ref body) = input.body {
-        db.execute("UPDATE requests SET body = ?1 WHERE id = ?2", params![body, id])
-            .map_err(|e| e.to_string())?;
+        db.execute(
+            "UPDATE requests SET body = ?1 WHERE id = ?2",
+            params![body, id],
+        )
+        .map_err(|e| e.to_string())?;
     }
     if let Some(ref folder_id) = input.folder_id {
-        db.execute("UPDATE requests SET folder_id = ?1 WHERE id = ?2", params![folder_id, id])
-            .map_err(|e| e.to_string())?;
+        db.execute(
+            "UPDATE requests SET folder_id = ?1 WHERE id = ?2",
+            params![folder_id, id],
+        )
+        .map_err(|e| e.to_string())?;
     }
     let req = db
         .query_row(
@@ -539,7 +575,8 @@ async fn import_openapi(
         base_url.to_string()
     };
 
-    let paths = spec.get("paths")
+    let paths = spec
+        .get("paths")
         .and_then(|p| p.as_object())
         .ok_or_else(|| "No paths found in OpenAPI spec".to_string())?;
 
@@ -551,7 +588,8 @@ async fn import_openapi(
         let path_obj = path_item.as_object().ok_or("Path item is not an object")?;
 
         // Use tags to group into folders; first tag is used
-        let tag = path_item.get("tags")
+        let tag = path_item
+            .get("tags")
             .and_then(|t| t.as_array())
             .and_then(|arr| arr.first())
             .and_then(|t| t.as_str())
@@ -569,11 +607,8 @@ async fn import_openapi(
             match existing {
                 Some(id) => id,
                 None => {
-                    db.execute(
-                        "INSERT INTO folders (name) VALUES (?1)",
-                        params![tag],
-                    )
-                    .map_err(|e| e.to_string())?;
+                    db.execute("INSERT INTO folders (name) VALUES (?1)", params![tag])
+                        .map_err(|e| e.to_string())?;
                     let id = db.last_insert_rowid();
                     imported_folders += 1;
                     id
@@ -584,10 +619,12 @@ async fn import_openapi(
         let methods = ["get", "post", "put", "delete", "patch", "head", "options"];
         for method_name in &methods {
             if let Some(operation) = path_obj.get(*method_name) {
-                let operation_id = operation.get("operationId")
+                let operation_id = operation
+                    .get("operationId")
                     .and_then(|o| o.as_str())
                     .unwrap_or("");
-                let summary = operation.get("summary")
+                let summary = operation
+                    .get("summary")
                     .and_then(|s| s.as_str())
                     .unwrap_or("");
 
@@ -648,7 +685,9 @@ fn generate_sample_body(schema: &serde_json::Value) -> Option<String> {
     serde_json::to_string_pretty(&sample).ok()
 }
 
-fn generate_from_schema(obj: &serde_json::Map<String, serde_json::Value>) -> Option<serde_json::Value> {
+fn generate_from_schema(
+    obj: &serde_json::Map<String, serde_json::Value>,
+) -> Option<serde_json::Value> {
     if let Some(r#type) = obj.get("type").and_then(|t| t.as_str()) {
         return Some(match r#type {
             "object" => {
@@ -677,7 +716,10 @@ fn generate_from_schema(obj: &serde_json::Map<String, serde_json::Value>) -> Opt
             }
             "string" => {
                 if let Some(values) = obj.get("enum").and_then(|e| e.as_array()) {
-                    values.first().cloned().unwrap_or(serde_json::Value::String("string".into()))
+                    values
+                        .first()
+                        .cloned()
+                        .unwrap_or(serde_json::Value::String("string".into()))
                 } else {
                     serde_json::Value::String("string".into())
                 }
@@ -701,9 +743,7 @@ fn generate_from_schema(obj: &serde_json::Map<String, serde_json::Value>) -> Opt
     Some(serde_json::Value::String("string".into()))
 }
 
-async fn export_collections(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+async fn export_collections(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let db = state.db.lock().await;
 
     let mut folder_stmt = db
@@ -760,11 +800,8 @@ async fn import_collections(
     if let Some(folders) = input.get("folders").and_then(|f| f.as_array()) {
         for folder in folders {
             let name = folder.get("name").and_then(|n| n.as_str()).unwrap_or("");
-            db.execute(
-                "INSERT INTO folders (name) VALUES (?1)",
-                params![name],
-            )
-            .map_err(|e| e.to_string())?;
+            db.execute("INSERT INTO folders (name) VALUES (?1)", params![name])
+                .map_err(|e| e.to_string())?;
             let old_id = folder.get("id").and_then(|i| i.as_i64()).unwrap_or(0);
             let new_id = db.last_insert_rowid();
             id_map.insert(old_id, new_id);
@@ -822,7 +859,10 @@ async fn main() {
         .route("/folders", get(list_folders).post(create_folder))
         .route("/folders/:id", put(update_folder).delete(delete_folder))
         .route("/collections", get(list_requests).post(create_request))
-        .route("/collections/:id", get(get_request).put(update_request).delete(delete_request))
+        .route(
+            "/collections/:id",
+            get(get_request).put(update_request).delete(delete_request),
+        )
         .route("/import-openapi", post(import_openapi))
         .route("/export", get(export_collections))
         .route("/import", post(import_collections))
