@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>File Manager</title>
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --bg-hover: #30363d;
+      --bg-active: #1f6feb22;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #484f58;
+      --border-primary: #30363d;
+      --border-secondary: #21262d;
+      --accent-primary: #58a6ff;
+      --accent-secondary: #1f6feb;
+      --accent-success: #3fb950;
+      --accent-warning: #d29922;
+      --accent-danger: #f85149;
+      --text-on-accent: #fff;
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+      --ui-font-size: 13px;
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 12px;
+      --spacing-lg: 16px;
+      --transition-fast: 100ms ease;
+      --transition-normal: 200ms ease;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: var(--ui-font-size);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ── */
+    .fm-header {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+      padding: var(--spacing-md) var(--spacing-lg);
+      border-bottom: 1px solid var(--border-primary);
+      background: var(--bg-secondary);
+    }
+    .fm-header-icon {
+      width: 32px; height: 32px; border-radius: var(--radius-md);
+      background: var(--accent-primary); color: var(--text-on-accent);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .fm-title { font-size: var(--ui-font-size); font-weight: 600; }
+    .fm-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    /* ── Toolbar ── */
+    .fm-toolbar {
+      display: flex; align-items: center; gap: var(--spacing-sm);
+      padding: var(--spacing-sm) var(--spacing-lg);
+      border-bottom: 1px solid var(--border-primary);
+      background: var(--bg-secondary);
+    }
+    .fm-breadcrumb {
+      display: flex; align-items: center; gap: 2px;
+      flex: 1; overflow-x: auto; white-space: nowrap;
+      scrollbar-width: none;
+    }
+    .fm-breadcrumb::-webkit-scrollbar { display: none; }
+    .fm-crumb {
+      background: none; border: none; color: var(--accent-primary);
+      cursor: pointer; font-size: var(--ui-font-size); padding: 2px 4px;
+      border-radius: var(--radius-sm); font-family: var(--font-mono);
+    }
+    .fm-crumb:hover { background: var(--bg-hover); }
+    .fm-crumb-sep { color: var(--text-muted); font-size: 11px; }
+    .fm-search {
+      width: 200px; padding: 5px 10px; border-radius: var(--radius-md);
+      border: 1px solid var(--border-primary); background: var(--bg-tertiary);
+      color: var(--text-primary); font-size: var(--ui-font-size);
+      outline: none; transition: border-color var(--transition-fast);
+    }
+    .fm-search:focus { border-color: var(--accent-primary); }
+    .fm-search::placeholder { color: var(--text-muted); }
+
+    /* ── Buttons ── */
+    .fm-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 5px 10px; border-radius: var(--radius-md);
+      border: 1px solid var(--border-primary); background: var(--bg-tertiary);
+      color: var(--text-primary); cursor: pointer; font-size: var(--ui-font-size);
+      transition: all var(--transition-fast); white-space: nowrap;
+    }
+    .fm-btn:hover { background: var(--bg-hover); }
+    .fm-btn-icon {
+      padding: 5px 6px; border: none; background: none; color: var(--text-secondary);
+      cursor: pointer; border-radius: var(--radius-sm); transition: all var(--transition-fast);
+    }
+    .fm-btn-icon:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .fm-btn-icon.active { color: var(--accent-primary); }
+    .fm-btn-primary {
+      background: var(--accent-secondary); border-color: var(--accent-secondary);
+      color: var(--text-on-accent);
+    }
+    .fm-btn-primary:hover { background: var(--accent-primary); }
+    .fm-btn-danger { color: var(--accent-danger); }
+    .fm-btn-danger:hover { background: #f8514922; }
+
+    /* ── Main layout ── */
+    .fm-main {
+      display: flex; flex: 1; overflow: hidden;
+    }
+
+    /* ── File list ── */
+    .fm-files {
+      flex: 1; overflow-y: auto; padding: var(--spacing-sm);
+    }
+    .fm-files::-webkit-scrollbar { width: 6px; }
+    .fm-files::-webkit-scrollbar-track { background: transparent; }
+    .fm-files::-webkit-scrollbar-thumb { background: var(--border-primary); border-radius: 3px; }
+
+    .fm-table { width: 100%; border-collapse: collapse; }
+    .fm-table th {
+      text-align: left; padding: 6px var(--spacing-md);
+      font-weight: 500; color: var(--text-secondary); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border-primary);
+      cursor: pointer; user-select: none; position: sticky; top: 0;
+      background: var(--bg-primary); z-index: 1;
+    }
+    .fm-table th:hover { color: var(--text-primary); }
+    .fm-table th.sorted { color: var(--accent-primary); }
+    .fm-table td {
+      padding: 6px var(--spacing-md); border-bottom: 1px solid var(--border-secondary);
+    }
+    .fm-row {
+      cursor: pointer; transition: background var(--transition-fast);
+    }
+    .fm-row:hover { background: var(--bg-hover); }
+    .fm-row.selected { background: var(--bg-active); }
+    .fm-row.drag-over { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
+
+    .fm-name { display: flex; align-items: center; gap: var(--spacing-sm); }
+    .fm-icon {
+      width: 16px; height: 16px; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0; font-size: 13px;
+    }
+    .fm-name-text {
+      font-family: var(--font-mono); font-size: var(--ui-font-size);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .fm-dir-name { color: var(--accent-primary); }
+    .fm-meta { color: var(--text-secondary); font-size: 11px; white-space: nowrap; }
+    .fm-size { text-align: right; font-family: var(--font-mono); font-size: 12px; }
+
+    .fm-empty {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; height: 200px; color: var(--text-muted); gap: 8px;
+    }
+    .fm-empty-icon { font-size: 18px; opacity: 0.4; }
+
+    /* ── Grid view ── */
+    .fm-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: var(--spacing-sm); padding: var(--spacing-sm);
+    }
+    .fm-grid-item {
+      display: flex; flex-direction: column; align-items: center;
+      padding: var(--spacing-md); border-radius: var(--radius-md);
+      cursor: pointer; transition: background var(--transition-fast);
+      gap: 4px;
+    }
+    .fm-grid-item:hover { background: var(--bg-hover); }
+    .fm-grid-item.selected { background: var(--bg-active); }
+    .fm-grid-icon { font-size: 16px; line-height: 1; }
+    .fm-grid-label {
+      font-size: 11px; text-align: center; word-break: break-all;
+      overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+      -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      font-family: var(--font-mono);
+    }
+
+    /* ── Preview panel ── */
+    .fm-preview {
+      width: 320px; border-left: 1px solid var(--border-primary);
+      background: var(--bg-secondary); overflow-y: auto; flex-shrink: 0;
+      display: flex; flex-direction: column;
+    }
+    .fm-preview.hidden { display: none; }
+    .fm-preview-header {
+      padding: var(--spacing-md) var(--spacing-lg);
+      border-bottom: 1px solid var(--border-primary);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .fm-preview-title { font-weight: 600; font-size: var(--ui-font-size); }
+    .fm-preview-body { padding: var(--spacing-md) var(--spacing-lg); flex: 1; overflow-y: auto; }
+    .fm-preview-row { margin-bottom: var(--spacing-md); }
+    .fm-preview-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+    .fm-preview-value { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); word-break: break-all; }
+    .fm-preview-code {
+      background: var(--bg-tertiary); border-radius: var(--radius-md);
+      padding: var(--spacing-md); font-family: var(--font-mono);
+      font-size: 12px; overflow-x: auto; white-space: pre-wrap;
+      max-height: 400px; overflow-y: auto; line-height: 1.5;
+    }
+
+    /* ── Context menu ── */
+    .fm-menu-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+    }
+    .fm-menu {
+      position: fixed; background: var(--bg-secondary); border: 1px solid var(--border-primary);
+      border-radius: var(--radius-lg); padding: 4px; min-width: 180px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 1001;
+    }
+    .fm-menu-item {
+      display: flex; align-items: center; gap: var(--spacing-sm);
+      padding: 6px var(--spacing-md); border-radius: var(--radius-sm);
+      border: none; background: none; color: var(--text-primary);
+      cursor: pointer; font-size: var(--ui-font-size); width: 100%;
+      font-family: inherit; text-align: left; white-space: nowrap;
+      transition: background var(--transition-fast);
+    }
+    .fm-menu-item:hover { background: var(--bg-hover); }
+    .fm-menu-item.danger { color: var(--accent-danger); }
+    .fm-menu-sep { height: 1px; background: var(--border-primary); margin: 4px 0; }
+
+    /* ── Dialogs ── */
+    .fm-dialog-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center; z-index: 2000;
+    }
+    .fm-dialog {
+      background: var(--bg-secondary); border: 1px solid var(--border-primary);
+      border-radius: var(--radius-lg); padding: var(--spacing-xl);
+      min-width: 360px; max-width: 90vw;
+    }
+    .fm-dialog h3 { margin-bottom: var(--spacing-md); font-size: 15px; }
+    .fm-dialog-input {
+      width: 100%; padding: 8px 12px; border-radius: var(--radius-md);
+      border: 1px solid var(--border-primary); background: var(--bg-tertiary);
+      color: var(--text-primary); font-size: var(--ui-font-size);
+      font-family: var(--font-mono); outline: none;
+    }
+    .fm-dialog-input:focus { border-color: var(--accent-primary); }
+    .fm-dialog-actions {
+      display: flex; justify-content: flex-end; gap: var(--spacing-sm);
+      margin-top: var(--spacing-lg);
+    }
+
+    /* ── Status bar ── */
+    .fm-status {
+      display: flex; align-items: center; gap: var(--spacing-md);
+      padding: 4px var(--spacing-lg); border-top: 1px solid var(--border-primary);
+      background: var(--bg-secondary); font-size: 11px; color: var(--text-muted);
+    }
+    .fm-status-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent-success); flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="fm-header">
+    <div class="fm-header-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+    </div>
+    <div>
+      <div class="fm-title">File Manager</div>
+      <div class="fm-subtitle" id="statusText">Ready</div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="fm-toolbar">
+    <div class="fm-breadcrumb" id="breadcrumb"></div>
+    <input class="fm-search" id="searchInput" type="text" placeholder="Search files..." />
+    <button class="fm-btn-icon" id="viewToggle" title="Toggle view">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    </button>
+    <button class="fm-btn-icon" id="previewToggle" title="Toggle preview">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </button>
+    <button class="fm-btn" id="newFolderBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+      New Folder
+    </button>
+    <button class="fm-btn" id="newFileBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      New File
+    </button>
+    <button class="fm-btn" id="uploadBtn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload
+    </button>
+  </div>
+
+  <!-- Main area -->
+  <div class="fm-main">
+    <div class="fm-files" id="fileContainer"></div>
+    <div class="fm-preview hidden" id="previewPanel">
+      <div class="fm-preview-header">
+        <span class="fm-preview-title">Preview</span>
+        <button class="fm-btn-icon" onclick="closePreview()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="fm-preview-body" id="previewBody"></div>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="fm-status">
+    <div class="fm-status-dot"></div>
+    <span id="statusBar">Ready</span>
+  </div>
+
+  <!-- Context menu -->
+  <div class="fm-menu-overlay" id="menuOverlay" style="display:none" onclick="closeMenu()"></div>
+  <div class="fm-menu" id="contextMenu" style="display:none"></div>
+
+  <!-- Dialog -->
+  <div class="fm-dialog-overlay" id="dialogOverlay" style="display:none" onclick="closeDialog()"></div>
+  <div class="fm-dialog" id="dialog" style="display:none"></div>
+
+  <input type="file" id="fileUpload" multiple style="display:none" />
+
+  <script>
+    const API = window.FILE_MANAGER_API || '';
+    let currentPath = '/';
+    let entries = [];
+    let selectedEntry = null;
+    let viewMode = 'list';
+    let sortField = 'name';
+    let sortAsc = true;
+    let showPreview = false;
+    let searchQuery = '';
+
+    // ── API calls ──
+    async function api(method, path, body = null) {
+      const opts = { method: method === 'ls' || method === 'read' || method === 'write' || method === 'mkdir' || method === 'rm' || method === 'mv' || method === 'cp' || method === 'stat' || method === 'search' || method === 'download' ? 'POST' : 'GET' };
+      if (body) {
+        opts.headers = { 'Content-Type': 'application/json' };
+        opts.body = JSON.stringify(body);
+      }
+      if (method === 'download') {
+        const resp = await fetch(`${API}/download`, opts);
+        if (!resp.ok) throw new Error(await resp.text());
+        const blob = await resp.blob();
+        const cd = resp.headers.get('content-disposition') || '';
+        const fname = cd.match(/filename="(.+)"/)?.[1] || body.path.split('/').pop() || 'download';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fname;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        return null;
+      }
+      const url = `${API}/${method}`;
+      const resp = await fetch(url, opts);
+      if (!resp.ok) throw new Error(await resp.text());
+      return resp.json();
+    }
+
+    // ── Navigation ──
+    async function navigate(path) {
+      currentPath = path;
+      searchQuery = '';
+      document.getElementById('searchInput').value = '';
+      selectedEntry = null;
+      closePreview();
+      await loadDir();
+      renderBreadcrumb();
+    }
+
+    async function loadDir() {
+      try {
+        setStatus('Loading...');
+        entries = await api('ls', null, { path: currentPath });
+        renderFiles();
+        setStatus(`${entries.length} items`);
+      } catch (e) {
+        setStatus('Error: ' + e.message);
+        entries = [];
+        renderFiles();
+      }
+    }
+
+    async function searchFiles(query) {
+      if (!query) return loadDir();
+      try {
+        setStatus('Searching...');
+        entries = await api('search', null, { path: currentPath, query, max_depth: 10 });
+        renderFiles();
+        setStatus(`${entries.length} results`);
+      } catch (e) {
+        setStatus('Search error: ' + e.message);
+      }
+    }
+
+    // ── Rendering ──
+    function renderBreadcrumb() {
+      const bc = document.getElementById('breadcrumb');
+      const parts = currentPath.split('/').filter(Boolean);
+      let html = `<button class="fm-crumb" onclick="navigate('/')">/</button>`;
+      let cumPath = '';
+      for (const part of parts) {
+        cumPath += '/' + part;
+        const p = cumPath;
+        html += `<span class="fm-crumb-sep">/</span><button class="fm-crumb" onclick="navigate('${escHtml(p)}')">${escHtml(part)}</button>`;
+      }
+      bc.innerHTML = html;
+    }
+
+    function renderFiles() {
+      const container = document.getElementById('fileContainer');
+      let filtered = entries;
+      if (searchQuery) {
+        filtered = entries.filter(e => e.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      }
+
+      // Sort
+      filtered.sort((a, b) => {
+        if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+        let cmp = 0;
+        if (sortField === 'name') cmp = a.name.localeCompare(b.name);
+        else if (sortField === 'size') cmp = a.size - b.size;
+        else if (sortField === 'modified') cmp = (a.modified || '').localeCompare(b.modified || '');
+        return sortAsc ? cmp : -cmp;
+      });
+
+      if (viewMode === 'grid') {
+        renderGrid(container, filtered);
+      } else {
+        renderTable(container, filtered);
+      }
+    }
+
+    function renderTable(container, items) {
+      if (items.length === 0) {
+        container.innerHTML = `<div class="fm-empty"><div class="fm-empty-icon">📁</div><div>Empty directory</div></div>`;
+        return;
+      }
+      const sortIcon = (field) => sortField === field ? (sortAsc ? ' ▲' : ' ▼') : '';
+      let html = `<table class="fm-table">
+        <thead><tr>
+          <th class="${sortField==='name'?'sorted':''}" onclick="sortBy('name')">Name${sortIcon('name')}</th>
+          <th class="${sortField==='size'?'sorted':''}" onclick="sortBy('size')" style="width:100px;text-align:right">Size${sortIcon('size')}</th>
+          <th class="${sortField==='modified'?'sorted':''}" onclick="sortBy('modified')" style="width:160px">Modified${sortIcon('modified')}</th>
+        </tr></thead><tbody>`;
+      for (const e of items) {
+        const icon = e.is_dir ? '📁' : fileIcon(e.extension);
+        const cls = selectedEntry && selectedEntry.path === e.path ? 'fm-row selected' : 'fm-row';
+        const size = e.is_dir ? '' : formatSize(e.size);
+        const date = e.modified ? formatDate(e.modified) : '';
+        html += `<tr class="${cls}"
+          onclick="selectEntry(${esc(JSON.stringify(e))})"
+          ondblclick="openEntry(${esc(JSON.stringify(e))})"
+          oncontextmenu="showMenu(event, ${esc(JSON.stringify(e))})"
+          ondragover="event.preventDefault(); this.classList.add('drag-over')"
+          ondragleave="this.classList.remove('drag-over')"
+          ondrop="handleDrop(event, ${esc(JSON.stringify(e))})">
+          <td><div class="fm-name"><span class="fm-icon">${icon}</span>
+            <span class="fm-name-text ${e.is_dir?'fm-dir-name':''}">${escHtml(e.name)}</span></div></td>
+          <td class="fm-size fm-meta">${size}</td>
+          <td class="fm-meta">${date}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    function renderGrid(container, items) {
+      if (items.length === 0) {
+        container.innerHTML = `<div class="fm-empty"><div class="fm-empty-icon">📁</div><div>Empty directory</div></div>`;
+        return;
+      }
+      let html = '<div class="fm-grid">';
+      for (const e of items) {
+        const icon = e.is_dir ? '📁' : fileIcon(e.extension);
+        const cls = selectedEntry && selectedEntry.path === e.path ? 'fm-grid-item selected' : 'fm-grid-item';
+        html += `<div class="${cls}"
+          onclick="selectEntry(${esc(JSON.stringify(e))})"
+          ondblclick="openEntry(${esc(JSON.stringify(e))})"
+          oncontextmenu="showMenu(event, ${esc(JSON.stringify(e))})">
+          <div class="fm-grid-icon">${icon}</div>
+          <div class="fm-grid-label">${escHtml(e.name)}</div>
+        </div>`;
+      }
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    // ── File icons ──
+    function fileIcon(ext) {
+      if (!ext) return '📄';
+      ext = ext.toLowerCase();
+      const map = {
+        'js': '📜', 'ts': '📜', 'jsx': '📜', 'tsx': '📜',
+        'py': '🐍', 'rb': '💎', 'go': '🔹', 'rs': '🦀', 'java': '☕',
+        'c': '🔧', 'cpp': '🔧', 'h': '🔧', 'hpp': '🔧',
+        'html': '🌐', 'css': '🎨', 'scss': '🎨', 'less': '🎨',
+        'json': '📋', 'yaml': '📋', 'yml': '📋', 'toml': '📋', 'xml': '📋',
+        'md': '📝', 'txt': '📝', 'log': '📝',
+        'png': '🖼️', 'jpg': '🖼️', 'jpeg': '🖼️', 'gif': '🖼️', 'svg': '🖼️', 'webp': '🖼️', 'ico': '🖼️',
+        'zip': '📦', 'tar': '📦', 'gz': '📦', 'rar': '📦',
+        'pdf': '📕', 'doc': '📘', 'docx': '📘', 'xls': '📗', 'xlsx': '📗',
+        'mp3': '🎵', 'wav': '🎵', 'flac': '🎵', 'ogg': '🎵',
+        'mp4': '🎬', 'mov': '🎬', 'avi': '🎬', 'mkv': '🎬',
+        'sh': '⚙️', 'bash': '⚙️', 'zsh': '⚙️', 'fish': '⚙️',
+        'env': '🔒', 'key': '🔒', 'pem': '🔒',
+      };
+      return map[ext] || '📄';
+    }
+
+    // ── Actions ──
+    function selectEntry(entry) {
+      selectedEntry = entry;
+      renderFiles();
+      if (showPreview) loadPreview(entry);
+    }
+
+    function openEntry(entry) {
+      if (entry.is_dir) {
+        navigate(entry.path);
+      } else {
+        selectEntry(entry);
+        if (!showPreview) togglePreview();
+        loadPreview(entry);
+      }
+    }
+
+    async function loadPreview(entry) {
+      const body = document.getElementById('previewBody');
+      const size = formatSize(entry.size);
+      const date = entry.modified ? formatDate(entry.modified) : 'Unknown';
+      const perm = entry.permissions || '-';
+      let contentHtml = '';
+
+      if (!entry.is_dir) {
+        try {
+          const data = await api('read', null, { path: entry.path });
+          if (data.binary) {
+            contentHtml = `<div class="fm-preview-code" style="color:var(--text-muted)">Binary file — ${size}</div>`;
+          } else if (data.content && data.content.length > 50000) {
+            contentHtml = `<div class="fm-preview-code">${escHtml(data.content.substring(0, 50000))}</div><div style="color:var(--text-muted);margin-top:8px;font-size:11px">Truncated (50KB limit)</div>`;
+          } else {
+            contentHtml = `<div class="fm-preview-code">${escHtml(data.content || '')}</div>`;
+          }
+        } catch (e) {
+          contentHtml = `<div style="color:var(--accent-danger)">${escHtml(e.message)}</div>`;
+        }
+      } else {
+        contentHtml = `<div style="color:var(--text-muted)">Directory</div>`;
+      }
+
+      body.innerHTML = `
+        <div class="fm-preview-row"><div class="fm-preview-label">Name</div><div class="fm-preview-value">${escHtml(entry.name)}</div></div>
+        <div class="fm-preview-row"><div class="fm-preview-label">Path</div><div class="fm-preview-value" style="word-break:break-all">${escHtml(entry.path)}</div></div>
+        <div class="fm-preview-row"><div class="fm-preview-label">Size</div><div class="fm-preview-value">${size}</div></div>
+        <div class="fm-preview-row"><div class="fm-preview-label">Modified</div><div class="fm-preview-value">${date}</div></div>
+        <div class="fm-preview-row"><div class="fm-preview-label">Permissions</div><div class="fm-preview-value">${perm}</div></div>
+        ${contentHtml}`;
+    }
+
+    // ── Context menu ──
+    function showMenu(e, entry) {
+      e.preventDefault();
+      e.stopPropagation();
+      selectedEntry = entry;
+      renderFiles();
+
+      const menu = document.getElementById('contextMenu');
+      const overlay = document.getElementById('menuOverlay');
+      const items = entry.is_dir ? [
+        { label: 'Open', action: () => navigate(entry.path) },
+        { label: 'Rename', action: () => promptRename(entry) },
+        { sep: true },
+        { label: 'Delete', action: () => promptDelete(entry), danger: true },
+      ] : [
+        { label: 'Open in Preview', action: () => { selectEntry(entry); if (!showPreview) togglePreview(); loadPreview(entry); } },
+        { label: 'Download', action: () => api('download', null, { path: entry.path }) },
+        { sep: true },
+        { label: 'Rename', action: () => promptRename(entry) },
+        { label: 'Copy', action: () => promptCopy(entry) },
+        { label: 'Move', action: () => promptMove(entry) },
+        { sep: true },
+        { label: 'Delete', action: () => promptDelete(entry), danger: true },
+      ];
+
+      let html = '';
+      for (const item of items) {
+        if (item.sep) html += '<div class="fm-menu-sep"></div>';
+        else html += `<button class="fm-menu-item${item.danger?' danger':''}" onclick="this._action()">${escHtml(item.label)}</button>`;
+      }
+      menu.innerHTML = html;
+      const btns = menu.querySelectorAll('.fm-menu-item');
+      let idx = 0;
+      for (const item of items) {
+        if (!item.sep) { btns[idx]._action = () => { closeMenu(); item.action(); }; idx++; }
+      }
+
+      menu.style.display = 'block';
+      overlay.style.display = 'block';
+      const x = Math.min(e.clientX, window.innerWidth - 200);
+      const y = Math.min(e.clientY, window.innerHeight - items.length * 36);
+      menu.style.left = x + 'px';
+      menu.style.top = y + 'px';
+    }
+
+    function closeMenu() {
+      document.getElementById('contextMenu').style.display = 'none';
+      document.getElementById('menuOverlay').style.display = 'none';
+    }
+
+    // ── Dialogs ──
+    function showDialog(title, defaultValue, onConfirm, isDanger = false) {
+      const overlay = document.getElementById('dialogOverlay');
+      const dialog = document.getElementById('dialog');
+      dialog.innerHTML = `
+        <h3>${escHtml(title)}</h3>
+        <input class="fm-dialog-input" id="dialogInput" value="${escHtml(defaultValue || '')}" autofocus />
+        <div class="fm-dialog-actions">
+          <button class="fm-btn" onclick="closeDialog()">Cancel</button>
+          <button class="fm-btn ${isDanger?'fm-btn-danger':'fm-btn-primary'}" id="dialogConfirm">OK</button>
+        </div>`;
+      overlay.style.display = 'block';
+      dialog.style.display = 'block';
+      const input = document.getElementById('dialogInput');
+      input.focus();
+      input.select();
+      document.getElementById('dialogConfirm').onclick = () => {
+        closeDialog();
+        onConfirm(input.value);
+      };
+      input.onkeydown = (e) => { if (e.key === 'Enter') { closeDialog(); onConfirm(input.value); } };
+    }
+
+    function closeDialog() {
+      document.getElementById('dialogOverlay').style.display = 'none';
+      document.getElementById('dialog').style.display = 'none';
+    }
+
+    function promptNewFolder() {
+      showDialog('New Folder', '', async (name) => {
+        if (!name) return;
+        const path = currentPath === '/' ? '/' + name : currentPath + '/' + name;
+        await api('mkdir', null, { path });
+        loadDir();
+      });
+    }
+
+    function promptNewFile() {
+      showDialog('New File', '', async (name) => {
+        if (!name) return;
+        const path = currentPath === '/' ? '/' + name : currentPath + '/' + name;
+        await api('write', null, { path, content: '' });
+        loadDir();
+      });
+    }
+
+    function promptRename(entry) {
+      showDialog('Rename', entry.name, async (newName) => {
+        if (!newName || newName === entry.name) return;
+        const dir = entry.path.substring(0, entry.path.lastIndexOf('/'));
+        const dest = dir + '/' + newName;
+        await api('mv', null, { source: entry.path, destination: dest });
+        loadDir();
+      });
+    }
+
+    function promptCopy(entry) {
+      showDialog('Copy to', currentPath + '/', async (dest) => {
+        if (!dest) return;
+        await api('cp', null, { source: entry.path, destination: dest, recursive: entry.is_dir });
+        loadDir();
+      });
+    }
+
+    function promptMove(entry) {
+      showDialog('Move to', currentPath + '/', async (dest) => {
+        if (!dest) return;
+        await api('mv', null, { source: entry.path, destination: dest });
+        loadDir();
+      });
+    }
+
+    function promptDelete(entry) {
+      showDialog(`Delete "${entry.name}"?`, '', async () => {
+        await api('rm', null, { path: entry.path, recursive: entry.is_dir });
+        if (selectedEntry && selectedEntry.path === entry.path) { selectedEntry = null; closePreview(); }
+        loadDir();
+      }, true);
+    }
+
+    // ── Upload ──
+    document.getElementById('uploadBtn').onclick = () => document.getElementById('fileUpload').click();
+    document.getElementById('fileUpload').onchange = async (e) => {
+      const files = e.target.files;
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('path', currentPath);
+        fd.append('file', file);
+        await fetch(`${API}/upload`, { method: 'POST', body: fd });
+      }
+      e.target.value = '';
+      loadDir();
+    };
+
+    // ── Drag & drop ──
+    async function handleDrop(e, targetEntry) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('drag-over');
+      if (!targetEntry.is_dir || !selectedEntry) return;
+      try {
+        await api('mv', null, { source: selectedEntry.path, destination: targetEntry.path });
+        loadDir();
+      } catch (err) {
+        setStatus('Move failed: ' + err.message);
+      }
+    }
+
+    // ── Sort ──
+    function sortBy(field) {
+      if (sortField === field) sortAsc = !sortAsc;
+      else { sortField = field; sortAsc = true; }
+      renderFiles();
+    }
+
+    // ── View toggle ──
+    function toggleView() {
+      viewMode = viewMode === 'list' ? 'grid' : 'list';
+      renderFiles();
+    }
+
+    function togglePreview() {
+      showPreview = !showPreview;
+      document.getElementById('previewPanel').classList.toggle('hidden', !showPreview);
+      document.getElementById('previewToggle').classList.toggle('active', showPreview);
+    }
+
+    function closePreview() {
+      showPreview = false;
+      document.getElementById('previewPanel').classList.add('hidden');
+      document.getElementById('previewToggle').classList.remove('active');
+    }
+
+    // ── Utils ──
+    function formatSize(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function formatDate(iso) {
+      try {
+        const d = new Date(iso);
+        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) +
+          ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      } catch { return iso; }
+    }
+
+    function setStatus(msg) {
+      document.getElementById('statusText').textContent = msg;
+      document.getElementById('statusBar').textContent = `${currentPath} — ${msg}`;
+    }
+
+    function esc(str) {
+      return JSON.stringify(str).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function escHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ── Init ──
+    document.getElementById('viewToggle').onclick = toggleView;
+    document.getElementById('previewToggle').onclick = togglePreview;
+    document.getElementById('newFolderBtn').onclick = promptNewFolder;
+    document.getElementById('newFileBtn').onclick = promptNewFile;
+    document.getElementById('searchInput').oninput = (e) => {
+      searchQuery = e.target.value;
+      if (searchQuery) searchFiles(searchQuery);
+      else loadDir();
+    };
+
+    // Click to deselect
+    document.getElementById('fileContainer').onclick = (e) => {
+      if (e.target === e.currentTarget || e.target.closest('.fm-empty')) {
+        selectedEntry = null;
+        renderFiles();
+      }
+    };
+
+    navigate('/');
+  </script>
+</body>
+</html>
