@@ -64,8 +64,9 @@ curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.s
 
 What it does: detects your OS/arch, downloads the matching binary from the
 latest stable release, verifies its SHA-256 checksum, and installs it to
-`~/.local/bin` (falling back to `/usr/local/bin`). Re-running the same command
-upgrades you to the newest version.
+`~/.local/bin` (falling back to `/usr/local/bin`). Pass `--all` to install every
+companion binary too (port-forward, code-vault, http-request). Re-running the
+same command upgrades you to the newest version.
 
 Prefer inspecting scripts before piping them into a shell? That's reasonable:
 

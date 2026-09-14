@@ -9,6 +9,10 @@ downloading, and managing files on the server via a local HTTP server.
   downloading, and managing files on the server. Features include directory
   listing, file read/write, rename, delete, and MIME type detection.
   Install with `bash install.sh --file-manager` or `bash install.sh --all`.
+- **Code Vault & HTTP Request CI.** The `code-vault` and `http-request`
+  binaries are now fully built, packaged, checksummed, and verified for
+  every supported platform — they were documented in v0.3.5 but never
+  actually shipped.
 - **Improved folder browser.** The Open Folder dialog now defaults to `/` on
   first launch and handles directory listing errors gracefully (e.g.
   permission-denied subdirectories no longer break the entire listing).
@@ -16,8 +20,17 @@ downloading, and managing files on the server via a local HTTP server.
   files now scrolls to the correct line.
 - **Git panel.** Stage/Discard/Diff action buttons are now always visible
   on each changed file row (no hover required).
+- **Release artifacts.** All five binaries — `noide-server`, `port-forward`,
+  `code-vault`, `http-request`, and `file-manager` — are now built and
+  attached to every release, with a `SHA256SUMS` manifest covering all of them.
+- **Cloudflare Quick Tunnel URL.** Now reported as `wss://` (the tunnel speaks
+  WebSocket over the tunnel), so clients connect correctly.
+- **New commands.** `check_code_vault`, `install_code_vault`,
+  `start_code_vault`, `stop_code_vault`, `code_vault_request`,
+  `check_http_request`, `install_http_request`, `start_http_request`,
+  `stop_http_request`, `http_request_request`.
 
-### Install (upgraded)
+### Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
@@ -70,14 +83,18 @@ On startup you get the usual pairing code + QR **plus** a Cloudflare tunnel URL
 if the download succeeds. Enter the pairing code in the NoIDE app
 (Settings → Server) and connect.
 
-```
+```bash
 noide-server --no-cloudflare
 ```
 
-Use `--no-cloudflare` (or set up Caddy/nginx as in the README) when you
-already have a `wss://` path.
+Use `--no-cloudflare` (or set up Caddy/nginx as in the README) when you already
+have a `wss://` path.
 
 ### Assets
+
+This release ships pre-built binaries for all four components — `noide-server`,
+`port-forward`, `code-vault`, and `http-request` — plus a `SHA256SUMS` manifest.
+`install.sh` downloads and verifies the ones you request.
 
 | File | Platform |
 |------|----------|
@@ -92,12 +109,12 @@ already have a `wss://` path.
 | `port-forward-darwin-aarch64` | macOS (Apple Silicon) |
 | `port-forward-windows-x86_64.exe` | Windows (x86_64) |
 | `code-vault-linux-x86_64` | Linux (Intel/AMD) |
-| `code-vault-linux-aarch64` | Linux (ARM64) |
+| `code-vault-linux-aarch64` | Linux (ARM64 — Raspberry Pi, ARM servers) |
 | `code-vault-darwin-x86_64` | macOS (Intel) |
 | `code-vault-darwin-aarch64` | macOS (Apple Silicon) |
 | `code-vault-windows-x86_64.exe` | Windows (x86_64) |
 | `http-request-linux-x86_64` | Linux (Intel/AMD) |
-| `http-request-linux-aarch64` | Linux (ARM64) |
+| `http-request-linux-aarch64` | Linux (ARM64 — Raspberry Pi, ARM servers) |
 | `http-request-darwin-x86_64` | macOS (Intel) |
 | `http-request-darwin-aarch64` | macOS (Apple Silicon) |
 | `http-request-windows-x86_64.exe` | Windows (x86_64) |

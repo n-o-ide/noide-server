@@ -43,43 +43,17 @@ jobs:
       - name: Package binaries
         run: |
           EXT=""
-          TARGET_FLAG=""
-          if [ "${{ matrix.target }}" = "darwin-x86_64" ]; then
-            TARGET_FLAG="--target x86_64-apple-darwin"
-          fi
           if [ "${{ matrix.target }}" = "windows-x86_64" ]; then
             EXT=".exe"
           fi
-
-          # noide-server
-          BIN="target/release/noide-server"
-          if [ "${{ matrix.target }}" = "darwin-x86_64" ]; then
-            BIN="target/x86_64-apple-darwin/release/noide-server"
-          elif [ "${{ matrix.target }}" = "windows-x86_64" ]; then
-            BIN="target/release/noide-server.exe"
-          fi
-          cp "$BIN" "noide-server-${{ matrix.target }}$EXT"
-          chmod +x "noide-server-${{ matrix.target }}$EXT"
-
-          # port-forward
-          BIN="target/release/port-forward"
-          if [ "${{ matrix.target }}" = "darwin-x86_64" ]; then
-            BIN="target/x86_64-apple-darwin/release/port-forward"
-          elif [ "${{ matrix.target }}" = "windows-x86_64" ]; then
-            BIN="target/release/port-forward.exe"
-          fi
-          cp "$BIN" "port-forward-${{ matrix.target }}$EXT"
-          chmod +x "port-forward-${{ matrix.target }}$EXT"
-
-          # file-manager
-          BIN="target/release/file-manager"
-          if [ "${{ matrix.target }}" = "darwin-x86_64" ]; then
-            BIN="target/x86_64-apple-darwin/release/file-manager"
-          elif [ "${{ matrix.target }}" = "windows-x86_64" ]; then
-            BIN="target/release/file-manager.exe"
-          fi
-          cp "$BIN" "file-manager-${{ matrix.target }}$EXT"
-          chmod +x "file-manager-${{ matrix.target }}$EXT"
+          for BIN in noide-server port-forward code-vault http-request file-manager; do
+            DIR="target/release"
+            if [ "${{ matrix.target }}" = "darwin-x86_64" ]; then
+              DIR="target/x86_64-apple-darwin/release"
+            fi
+            cp "$DIR/$BIN$EXT" "$BIN-${{ matrix.target }}$EXT"
+            chmod +x "$BIN-${{ matrix.target }}$EXT"
+          done
       - name: Smoke test noide-server
         if: runner.os == 'Linux'
         run: node scripts/smoke-test.mjs "./noide-server-${{ matrix.target }}"
@@ -89,6 +63,8 @@ jobs:
           path: |
             noide-server-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
             port-forward-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
+            code-vault-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
+            http-request-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
             file-manager-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
           if-no-files-found: error
 
@@ -103,7 +79,7 @@ jobs:
           merge-multiple: true
       - name: Generate SHA256SUMS
         working-directory: artifacts
-        run: sha256sum noide-server-* port-forward-* file-manager-* | tee SHA256SUMS
+        run: sha256sum noide-server-* port-forward-* code-vault-* http-request-* file-manager-* | tee SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: checksums
@@ -124,14 +100,12 @@ jobs:
         working-directory: dist
         run: |
           test -f SHA256SUMS
-          for t in linux-x86_64 linux-aarch64 darwin-x86_64 darwin-aarch64; do
-            test -f "noide-server-$t" || { echo "missing noide-server-$t" >&2; exit 1; }
-            test -f "port-forward-$t" || { echo "missing port-forward-$t" >&2; exit 1; }
-            test -f "file-manager-$t" || { echo "missing file-manager-$t" >&2; exit 1; }
+          for BIN in noide-server port-forward code-vault http-request file-manager; do
+            for t in linux-x86_64 linux-aarch64 darwin-x86_64 darwin-aarch64; do
+              test -f "$BIN-$t" || { echo "missing $BIN-$t" >&2; exit 1; }
+            done
+            test -f "$BIN-windows-x86_64.exe" || { echo "missing $BIN-windows-x86_64.exe" >&2; exit 1; }
           done
-          test -f "noide-server-windows-x86_64.exe" || { echo "missing noide-server-windows-x86_64.exe" >&2; exit 1; }
-          test -f "port-forward-windows-x86_64.exe" || { echo "missing port-forward-windows-x86_64.exe" >&2; exit 1; }
-          test -f "file-manager-windows-x86_64.exe" || { echo "missing file-manager-windows-x86_64.exe" >&2; exit 1; }
       - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
