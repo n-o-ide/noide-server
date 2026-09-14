@@ -125,9 +125,9 @@ fn file_entry_from_path(path: &FsPath) -> Option<FileEntry> {
     let meta = std::fs::metadata(path).ok()?;
     let name = path.file_name()?.to_string_lossy().to_string();
     let ext = path.extension().map(|e| e.to_string_lossy().to_string());
-    let modified = meta.modified().ok().and_then(|t| {
+    let modified = meta.modified().ok().map(|t| {
         let datetime: chrono::DateTime<chrono::Utc> = t.into();
-        Some(datetime.to_rfc3339())
+        datetime.to_rfc3339()
     });
     let permissions = {
         #[cfg(unix)]
@@ -179,9 +179,9 @@ async fn ls_handler(Json(input): Json<LsRequest>) -> Result<Json<Vec<FileEntry>>
             .path()
             .extension()
             .map(|e| e.to_string_lossy().to_string());
-        let modified = metadata.modified().ok().and_then(|t| {
+        let modified = metadata.modified().ok().map(|t| {
             let datetime: chrono::DateTime<chrono::Utc> = t.into();
-            Some(datetime.to_rfc3339())
+            datetime.to_rfc3339()
         });
         let permissions = {
             #[cfg(unix)]
@@ -251,7 +251,7 @@ async fn read_handler(Json(input): Json<ReadRequest>) -> Result<Json<serde_json:
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
     // Try to detect binary
-    let is_binary = content.iter().any(|&b| b == 0);
+    let is_binary = content.contains(&0);
 
     if is_binary {
         Ok(Json(serde_json::json!({
@@ -453,9 +453,9 @@ async fn stat_handler(Json(input): Json<StatRequest>) -> Result<Json<StatResult>
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
     let ext = path.extension().map(|e| e.to_string_lossy().to_string());
-    let modified = metadata.modified().ok().and_then(|t| {
+    let modified = metadata.modified().ok().map(|t| {
         let datetime: chrono::DateTime<chrono::Utc> = t.into();
-        Some(datetime.to_rfc3339())
+        datetime.to_rfc3339()
     });
     let permissions = {
         #[cfg(unix)]
