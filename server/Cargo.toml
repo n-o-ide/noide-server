@@ -28,10 +28,3 @@ flate2 = "1"
 # (already in the tree via mio/ctrlc) with just the two modules we need.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Threading"] }
-
-[profile.release]
-panic = "abort"
-codegen-units = 1
-lto = true
-opt-level = "s"
-strip = true

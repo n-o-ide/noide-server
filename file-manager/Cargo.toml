@@ -16,10 +16,3 @@ walkdir = "2"
 mime_guess = "2"
 chrono = "0.4"
 dirs-next = "2"
-
-[profile.release]
-panic = "abort"
-codegen-units = 1
-lto = true
-opt-level = "s"
-strip = true
