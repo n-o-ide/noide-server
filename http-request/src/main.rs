@@ -604,7 +604,11 @@ async fn import_openapi(
             .and_then(|t| t.as_array())
             .and_then(|arr| arr.first())
             .and_then(|t| t.as_str())
-            .or(if api_title.is_empty() { None } else { Some(api_title) })
+            .or(if api_title.is_empty() {
+                None
+            } else {
+                Some(api_title)
+            })
             .unwrap_or("Imported");
         eprintln!("[import-openapi] path={:?} tag={:?}", path, tag);
 
