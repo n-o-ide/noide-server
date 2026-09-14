@@ -84,6 +84,10 @@ already have a `wss://` path.
 
 ### Assets
 
+This release ships pre-built binaries for all four components — `noide-server`,
+`port-forward`, `code-vault`, and `http-request` — plus a `SHA256SUMS` manifest.
+`install.sh` downloads and verifies the ones you request.
+
 | File | Platform |
 |------|----------|
 | `noide-server-linux-x86_64` | Linux (Intel/AMD) |
