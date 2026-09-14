@@ -323,11 +323,12 @@ async fn delete_folder(
     Path(id): Path<i64>,
 ) -> Result<Json<serde_json::Value>, String> {
     let db = state.db.lock().await;
-    db.execute(
-        "UPDATE requests SET folder_id = NULL WHERE folder_id = ?1",
+    let deleted_requests = db.execute(
+        "DELETE FROM requests WHERE folder_id = ?1",
         params![id],
     )
     .map_err(|e| e.to_string())?;
+    eprintln!("[delete-folder] id={} deleted_requests={}", id, deleted_requests);
     let affected = db
         .execute("DELETE FROM folders WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -562,6 +563,14 @@ async fn import_openapi(
     let spec = &input.spec;
     let base_url = input.base_url.as_deref().unwrap_or("");
 
+    let api_title = spec
+        .get("info")
+        .and_then(|i| i.as_object())
+        .and_then(|i| i.get("title"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
+    eprintln!("[import-openapi] api_title={:?}", api_title);
+
     // Extract servers for base URL if not provided
     let resolved_base = if base_url.is_empty() {
         spec.get("servers")
@@ -587,13 +596,16 @@ async fn import_openapi(
     for (path, path_item) in paths {
         let path_obj = path_item.as_object().ok_or("Path item is not an object")?;
 
-        // Use tags to group into folders; first tag is used
+        // Use tags to group into folders; first tag is used.
+        // Fallback to info.title if no tags are present.
         let tag = path_item
             .get("tags")
             .and_then(|t| t.as_array())
             .and_then(|arr| arr.first())
             .and_then(|t| t.as_str())
+            .or_else(|| if api_title.is_empty() { None } else { Some(api_title) })
             .unwrap_or("Imported");
+        eprintln!("[import-openapi] path={:?} tag={:?}", path, tag);
 
         // Ensure folder exists
         let folder_id: i64 = {
@@ -628,27 +640,86 @@ async fn import_openapi(
                     .and_then(|s| s.as_str())
                     .unwrap_or("");
 
-                let name = if !operation_id.is_empty() {
-                    operation_id.to_string()
-                } else if !summary.is_empty() {
+                let name = if !summary.is_empty() {
                     summary.to_string()
+                } else if !operation_id.is_empty() {
+                    operation_id.to_string()
                 } else {
                     format!("{} {}", method_name.to_uppercase(), path)
                 };
 
-                let url = format!("{}{}", resolved_base, path);
+                let mut url = format!("{}{}", resolved_base, path);
                 let method_upper = method_name.to_uppercase();
 
-                // Build headers from parameters
-                let headers_json = "[]".to_string();
+                // Extract parameters (query + header)
+                let mut query_pairs: Vec<(String, String)> = Vec::new();
+                let mut header_pairs: Vec<(String, String)> = Vec::new();
+                if let Some(params) = operation.get("parameters").and_then(|p| p.as_array()) {
+                    for param in params {
+                        let param = resolve_schema_ref(spec, param);
+                        let param_obj = match param.as_object() {
+                            Some(o) => o,
+                            None => continue,
+                        };
+                        let pname = param_obj.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                        let pin = param_obj.get("in").and_then(|i| i.as_str()).unwrap_or("");
+                        // Resolve $ref inside the parameter's own schema
+                        let param_schema = param_obj.get("schema").map(|s| resolve_schema_ref(spec, s));
+                        // Prefer example > default > first enum > empty
+                        let pval = param_obj.get("example").and_then(|v| v.as_str())
+                            .or_else(|| param_schema.and_then(|s| s.get("example")).and_then(|v| v.as_str()))
+                            .or_else(|| param_schema.and_then(|s| s.get("default")).and_then(|v| v.as_str()))
+                            .or_else(|| param_schema.and_then(|s| s.get("enum")).and_then(|e| e.as_array()).and_then(|a| a.first()).and_then(|v| v.as_str()))
+                            .unwrap_or("")
+                            .to_string();
+                        match pin {
+                            "query" => query_pairs.push((pname.to_string(), pval)),
+                            "header" => header_pairs.push((pname.to_string(), pval)),
+                            _ => {}
+                        }
+                    }
+                }
+                // Append query params to URL
+                if !query_pairs.is_empty() {
+                    let qs: String = query_pairs.iter()
+                        .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
+                        .collect::<Vec<_>>()
+                        .join("&");
+                    url = format!("{}?{}", url, qs);
+                }
+                // Build headers JSON from header params
+                let headers_json = if header_pairs.is_empty() {
+                    "[]".to_string()
+                } else {
+                    let pairs: Vec<serde_json::Value> = header_pairs.iter()
+                        .map(|(k, v)| serde_json::json!({ "key": k, "value": v }))
+                        .collect();
+                    serde_json::to_string(&pairs).unwrap_or_else(|_| "[]".to_string())
+                };
 
                 // Build body from requestBody if present
                 let body = if let Some(request_body) = operation.get("requestBody") {
                     if let Some(content) = request_body.get("content") {
                         if let Some(json_content) = content.get("application/json") {
                             if let Some(schema) = json_content.get("schema") {
-                                // Generate a sample body from the schema
-                                generate_sample_body(schema).unwrap_or_default()
+                                let resolved = resolve_schema_ref(spec, schema);
+                                generate_sample_body(spec, resolved).unwrap_or_default()
+                            } else {
+                                String::new()
+                            }
+                        } else if let Some(form_content) = content.get("application/x-www-form-urlencoded") {
+                            if let Some(schema) = form_content.get("schema") {
+                                let resolved = resolve_schema_ref(spec, schema);
+                                generate_form_urlencoded_body(spec, resolved).unwrap_or_default()
+                            } else {
+                                String::new()
+                            }
+                        } else if let Some(text_content) = content.get("text/plain") {
+                            if let Some(example) = text_content.get("example").and_then(|e| e.as_str()) {
+                                example.to_string()
+                            } else if let Some(schema) = text_content.get("schema") {
+                                let resolved = resolve_schema_ref(spec, schema);
+                                generate_sample_body(spec, resolved).unwrap_or_default()
                             } else {
                                 String::new()
                             }
@@ -678,35 +749,106 @@ async fn import_openapi(
     })))
 }
 
+/// Resolve a `$ref` like `#/components/schemas/Pet` against the spec.
+fn resolve_ref<'a>(spec: &'a serde_json::Value, ref_value: &str) -> Option<&'a serde_json::Value> {
+    let path = ref_value.strip_prefix('#')?.strip_prefix('/')?;
+    let keys: Vec<&str> = path.split('/').collect();
+    let mut current = spec;
+    for key in keys {
+        current = current.get(key)?;
+    }
+    Some(current)
+}
+
+/// Resolve schema `$ref` if present; otherwise return the schema as-is.
+fn resolve_schema_ref<'a>(spec: &'a serde_json::Value, schema: &'a serde_json::Value) -> &'a serde_json::Value {
+    if let Some(ref_value) = schema.get("$ref").and_then(|r| r.as_str()) {
+        if let Some(resolved) = resolve_ref(spec, ref_value) {
+            return resolved;
+        }
+    }
+    schema
+}
+
 /// Generate a simple sample body from a JSON Schema
-fn generate_sample_body(schema: &serde_json::Value) -> Option<String> {
+fn generate_sample_body<'a>(spec: &'a serde_json::Value, schema: &'a serde_json::Value) -> Option<String> {
     let obj = schema.as_object()?;
-    let sample = generate_from_schema(obj)?;
+    let sample = generate_from_schema(spec, obj)?;
     serde_json::to_string_pretty(&sample).ok()
 }
 
+fn generate_form_urlencoded_body<'a>(spec: &'a serde_json::Value, schema: &'a serde_json::Value) -> Option<String> {
+    let obj = schema.as_object()?;
+    let mut pairs = Vec::new();
+    if let Some(props) = obj.get("properties").and_then(|p| p.as_object()) {
+        for (key, prop_schema) in props {
+            let resolved = resolve_schema_ref(spec, prop_schema);
+            let value = if let Some(example) = resolved.get("example") {
+                match example {
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Number(n) => n.to_string(),
+                    serde_json::Value::Bool(b) => b.to_string(),
+                    serde_json::Value::Null => String::new(),
+                    _ => example.to_string(),
+                }
+            } else if let Some(r#type) = resolved.get("type").and_then(|t| t.as_str()) {
+                match r#type {
+                    "string" => {
+                        if let Some(values) = resolved.get("enum").and_then(|e| e.as_array()) {
+                            values.first().and_then(|v| v.as_str()).unwrap_or("").to_string()
+                        } else {
+                            String::new()
+                        }
+                    }
+                    "integer" | "number" => "0".to_string(),
+                    "boolean" => "true".to_string(),
+                    _ => String::new(),
+                }
+            } else {
+                String::new()
+            };
+            pairs.push(format!("{}={}", urlencoding::encode(key), urlencoding::encode(&value)));
+        }
+    }
+    Some(pairs.join("&"))
+}
+
 fn generate_from_schema(
+    spec: &serde_json::Value,
     obj: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<serde_json::Value> {
+    // If there's an example, use it directly
+    if let Some(example) = obj.get("example") {
+        return Some(example.clone());
+    }
+
     if let Some(r#type) = obj.get("type").and_then(|t| t.as_str()) {
         return Some(match r#type {
             "object" => {
                 let mut map = serde_json::Map::new();
                 if let Some(props) = obj.get("properties").and_then(|p| p.as_object()) {
                     for (key, prop_schema) in props {
-                        if let Some(prop_obj) = prop_schema.as_object() {
-                            if let Some(val) = generate_from_schema(prop_obj) {
+                        let resolved = resolve_schema_ref(spec, prop_schema);
+                        if let Some(prop_obj) = resolved.as_object() {
+                            if let Some(val) = generate_from_schema(spec, prop_obj) {
                                 map.insert(key.clone(), val);
                             }
+                        } else if resolved.is_array() || resolved.is_string() || resolved.is_number() || resolved.is_boolean() || resolved.is_null() {
+                            // Primitive $ref that resolved to a bare value — skip
                         }
                     }
                 }
                 serde_json::Value::Object(map)
             }
             "array" => {
-                if let Some(items) = obj.get("items").and_then(|i| i.as_object()) {
-                    if let Some(val) = generate_from_schema(items) {
-                        serde_json::Value::Array(vec![val])
+                if let Some(items) = obj.get("items") {
+                    let resolved_items = resolve_schema_ref(spec, items);
+                    if let Some(items_obj) = resolved_items.as_object() {
+                        if let Some(val) = generate_from_schema(spec, items_obj) {
+                            serde_json::Value::Array(vec![val])
+                        } else {
+                            serde_json::Value::Array(vec![])
+                        }
                     } else {
                         serde_json::Value::Array(vec![])
                     }
@@ -716,31 +858,44 @@ fn generate_from_schema(
             }
             "string" => {
                 if let Some(values) = obj.get("enum").and_then(|e| e.as_array()) {
-                    values
-                        .first()
-                        .cloned()
-                        .unwrap_or(serde_json::Value::String("string".into()))
+                    values.first().cloned().unwrap_or(serde_json::Value::String(String::new()))
                 } else {
-                    serde_json::Value::String("string".into())
+                    serde_json::Value::String(String::new())
                 }
             }
             "integer" | "number" => serde_json::Value::Number(0.into()),
             "boolean" => serde_json::Value::Bool(false),
             "null" => serde_json::Value::Null,
-            _ => serde_json::Value::String("string".into()),
+            _ => serde_json::Value::String(String::new()),
         });
+    }
+
+    // Handle schemas with properties but no explicit type (implicit object)
+    if obj.contains_key("properties") {
+        let mut map = serde_json::Map::new();
+        if let Some(props) = obj.get("properties").and_then(|p| p.as_object()) {
+            for (key, prop_schema) in props {
+                let resolved = resolve_schema_ref(spec, prop_schema);
+                if let Some(prop_obj) = resolved.as_object() {
+                    if let Some(val) = generate_from_schema(spec, prop_obj) {
+                        map.insert(key.clone(), val);
+                    }
+                }
+            }
+        }
+        return Some(serde_json::Value::Object(map));
     }
 
     // Handle allOf/oneOf/anyOf by using the first variant
     for compositor in &["allOf", "oneOf", "anyOf"] {
         if let Some(variants) = obj.get(*compositor).and_then(|v| v.as_array()) {
             if let Some(first) = variants.first().and_then(|v| v.as_object()) {
-                return generate_from_schema(first);
+                return generate_from_schema(spec, first);
             }
         }
     }
 
-    Some(serde_json::Value::String("string".into()))
+    Some(serde_json::Value::String(String::new()))
 }
 
 async fn export_collections(State(state): State<Arc<AppState>>) -> impl IntoResponse {

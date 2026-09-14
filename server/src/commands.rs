@@ -874,11 +874,9 @@ fn read_dir_recursive(
         };
 
         let children = if is_directory && current_depth < max_depth {
-            Some(read_dir_recursive(
-                &entry_path,
-                max_depth,
-                current_depth + 1,
-            )?)
+            // Gracefully handle per-subdirectory errors (e.g. permission
+            // denied) instead of aborting the entire listing.
+            read_dir_recursive(&entry_path, max_depth, current_depth + 1).ok()
         } else {
             None
         };

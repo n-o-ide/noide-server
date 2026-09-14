@@ -433,6 +433,31 @@ impl HttpRequestState {
     }
 }
 
+/// Tracks the standalone `file-manager` child process.
+#[derive(Debug, Default)]
+pub struct FileManagerState {
+    pub child: tokio::sync::Mutex<Option<tokio::process::Child>>,
+    pub port: tokio::sync::Mutex<Option<u16>>,
+}
+
+impl FileManagerState {
+    pub fn new() -> Self {
+        Self {
+            child: tokio::sync::Mutex::new(None),
+            port: tokio::sync::Mutex::new(None),
+        }
+    }
+
+    pub async fn stop(&self) {
+        let mut guard = self.child.lock().await;
+        if let Some(mut child) = guard.take() {
+            let _ = child.start_kill();
+            let _ = child.wait().await;
+        }
+        *self.port.lock().await = None;
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn start(
     pty: Arc<Mutex<PtyManager>>,
@@ -443,6 +468,7 @@ pub async fn start(
     port_forward: Arc<PortForwardState>,
     code_vault: Arc<CodeVaultState>,
     http_request: Arc<HttpRequestState>,
+    file_manager: Arc<FileManagerState>,
 ) -> std::io::Result<()> {
     // Reap exited or long-abandoned sessions so shells never leak as
     // orphans on the host (a session with no subscriber is kept alive for
@@ -476,6 +502,7 @@ pub async fn start(
         let port_forward = port_forward.clone();
         let code_vault = code_vault.clone();
         let http_request = http_request.clone();
+        let file_manager = file_manager.clone();
         tokio::spawn(async move {
             if let Err(e) = handle_connection(
                 stream,
@@ -486,6 +513,7 @@ pub async fn start(
                 port_forward,
                 code_vault,
                 http_request,
+                file_manager,
             )
             .await
             {
@@ -509,6 +537,7 @@ async fn handle_connection(
     port_forward: Arc<PortForwardState>,
     code_vault: Arc<CodeVaultState>,
     http_request: Arc<HttpRequestState>,
+    file_manager: Arc<FileManagerState>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Interactive terminal traffic is a stream of small messages; without
     // TCP_NODELAY the Nagle algorithm can hold a small write until earlier
@@ -684,6 +713,7 @@ async fn handle_connection(
                 let port_forward_t = port_forward.clone();
                 let code_vault_t = code_vault.clone();
                 let http_request_t = http_request.clone();
+                let file_manager_t = file_manager.clone();
                 tokio::spawn(async move {
                     let res = handle(
                         &req,
@@ -697,6 +727,7 @@ async fn handle_connection(
                         port_forward_t,
                         &code_vault_t,
                         &http_request_t,
+                        &file_manager_t,
                     )
                     .await;
                     let resp = match res {
@@ -859,6 +890,7 @@ async fn handle(
     port_forward: Arc<PortForwardState>,
     code_vault: &Arc<CodeVaultState>,
     http_request: &Arc<HttpRequestState>,
+    file_manager: &Arc<FileManagerState>,
 ) -> Result<Value, String> {
     let args = &req.args;
     match req.command.as_str() {
@@ -1580,6 +1612,19 @@ async fn handle(
             let path: String = arg(args, "path")?;
             let body: Option<String> = opt_arg(args, "body");
             proxy_http_request_request(&method, &path, body, http_request.clone()).await
+        }
+        "check_file_manager" => Ok(json!({ "installed": is_file_manager_on_path() })),
+        "install_file_manager" => {
+            let force: bool = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+            install_file_manager_command(force).await
+        }
+        "start_file_manager" => start_file_manager_command(file_manager.clone()).await,
+        "stop_file_manager" => stop_file_manager_command(file_manager.clone()).await,
+        "file_manager_request" => {
+            let method: String = arg(args, "method")?;
+            let path: String = arg(args, "path")?;
+            let body: Option<String> = opt_arg(args, "body");
+            proxy_file_manager_request(&method, &path, body, file_manager.clone()).await
         }
         other => Err(format!("unknown command: {}", other)),
     }
@@ -2395,6 +2440,25 @@ async fn start_http_request_command(state: Arc<HttpRequestState>) -> Result<Valu
         .map_err(|_| "http-request did not report a port".to_string())?;
     *state.child.lock().await = Some(child);
     *state.port.lock().await = Some(port);
+    // Wait for the http-request server to actually accept connections.
+    // The binary prints the port before axum::serve starts, so there is a
+    // brief window where the listener is bound but not yet accepting.
+    let addr = format!("127.0.0.1:{}", port);
+    for _ in 0..50 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        if tokio::net::TcpStream::connect(&addr).await.is_ok() {
+            return Ok(json!({ "running": true, "port": port }));
+        }
+        // Check if the child exited unexpectedly.
+        let mut guard = state.child.lock().await;
+        if let Some(child) = guard.as_mut() {
+            if let Ok(Some(_status)) = child.try_wait() {
+                drop(guard);
+                state.stop().await;
+                return Err("http-request process exited before becoming ready".to_string());
+            }
+        }
+    }
     Ok(json!({ "running": true, "port": port }))
 }
 
@@ -2515,4 +2579,197 @@ async fn stop_port_forward_web_command(
 ) -> Result<Value, String> {
     port_forward.stop("web").await;
     Ok(json!({"stopped": true}))
+}
+
+// ── File Manager ───────────────────────────────────────────────────────────
+
+fn is_file_manager_on_path() -> bool {
+    let exe = if std::cfg!(windows) { "file-manager.exe" } else { "file-manager" };
+    if let Some(path_env) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_env) {
+            if dir.join(exe).is_file() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn find_file_manager_binary() -> Option<std::path::PathBuf> {
+    let exe = if std::cfg!(windows) { "file-manager.exe" } else { "file-manager" };
+    // 1. Check PATH
+    if let Some(path_env) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_env) {
+            let candidate = dir.join(exe);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    // 2. Dev fallback: look next to noide-server in the project tree.
+    let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    if let Some(project_root) = server_dir.parent() {
+        let fm_dir = project_root.join("file-manager");
+        for profile in ["target/debug", "target/release"] {
+            let candidate = fm_dir.join(profile).join(exe);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+async fn install_file_manager_command(force: bool) -> Result<Value, String> {
+    if !force && is_file_manager_on_path() {
+        return Ok(json!({ "installed": true, "output": "file-manager is already installed." }));
+    }
+    if force {
+        eprintln!("[file-manager] force install — building from local source");
+        return install_file_manager_local().await;
+    }
+    let remote_result = install_file_manager_remote().await;
+    if let Ok(val) = &remote_result {
+        if val.get("installed").and_then(|v| v.as_bool()).unwrap_or(false) {
+            return remote_result;
+        }
+    }
+    let remote_err = remote_result.err().unwrap_or_default();
+    eprintln!("[file-manager] remote install failed: {}. Trying local build…", remote_err);
+    install_file_manager_local().await
+}
+
+async fn install_file_manager_remote() -> Result<Value, String> {
+    use std::process::Stdio;
+    let install_url = "https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh";
+    let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
+    let curl_output = tokio::process::Command::new("curl")
+        .args(["-fsSL", install_url, "-o", script_path.to_str().unwrap_or("")])
+        .stdout(Stdio::piped()).stderr(Stdio::piped())
+        .kill_on_drop(true).output().await
+        .map_err(|e| format!("Failed to download install.sh: {}", e))?;
+    if !curl_output.status.success() {
+        return Err(format!("Failed to download install.sh: {}",
+            String::from_utf8_lossy(&curl_output.stderr)));
+    }
+    let output = tokio::process::Command::new("bash")
+        .args([script_path.to_str().unwrap_or(""), "--file-manager"])
+        .stdout(Stdio::piped()).stderr(Stdio::piped())
+        .kill_on_drop(true).output().await
+        .map_err(|e| format!("Failed to run install.sh: {}", e))?;
+    let combined = format!("{}\n{}",
+        String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    if output.status.success() && find_file_manager_binary().is_some() {
+        Ok(json!({ "installed": true, "output": combined }))
+    } else {
+        Err(combined)
+    }
+}
+
+async fn install_file_manager_local() -> Result<Value, String> {
+    use std::process::Stdio;
+    let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let project_root = server_dir.parent()
+        .ok_or_else(|| "cannot locate project root".to_string())?;
+    let fm_dir = project_root.join("file-manager");
+    if !fm_dir.join("Cargo.toml").exists() {
+        return Err(format!("Local file-manager source not found at {}", fm_dir.display()));
+    }
+    let cargo = std::env::var_os("CARGO")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("cargo"));
+    let output = tokio::process::Command::new(&cargo)
+        .args(["install", "--path", fm_dir.to_str().unwrap_or("file-manager")])
+        .stdout(Stdio::piped()).stderr(Stdio::piped())
+        .kill_on_drop(true).output().await
+        .map_err(|e| format!("Failed to run cargo install: {}", e))?;
+    let combined = format!("{}\n{}",
+        String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    if output.status.success() && find_file_manager_binary().is_some() {
+        Ok(json!({ "installed": true, "output": combined }))
+    } else {
+        Err(combined)
+    }
+}
+
+async fn start_file_manager_command(state: Arc<FileManagerState>) -> Result<Value, String> {
+    use std::process::Stdio;
+    {
+        let guard = state.child.lock().await;
+        if guard.is_some() {
+            let port = *state.port.lock().await;
+            return Ok(json!({ "running": true, "port": port }));
+        }
+    }
+    let bin = find_file_manager_binary().ok_or_else(|| {
+        "file-manager binary not found. Install it from the Apps folder first.".to_string()
+    })?;
+    let mut cmd = tokio::process::Command::new(&bin);
+    cmd.env("FILE_MANAGER_ADDR", "127.0.0.1:0");
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.kill_on_drop(true);
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to start file-manager: {}", e))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "file-manager: missing stdout".to_string())?;
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    let mut reader = BufReader::new(stdout).lines();
+    let (port_tx, port_rx) = tokio::sync::oneshot::channel::<u16>();
+    tokio::spawn(async move {
+        while let Ok(Some(line)) = reader.next_line().await {
+            if let Some(p) = line.strip_prefix("FILE_MANAGER_PORT=") {
+                if let Ok(port) = p.trim().parse::<u16>() {
+                    let _ = port_tx.send(port);
+                    return;
+                }
+            }
+        }
+    });
+    let port = tokio::time::timeout(std::time::Duration::from_secs(5), port_rx)
+        .await
+        .map_err(|_| "file-manager did not start in time".to_string())?
+        .map_err(|_| "file-manager did not report a port".to_string())?;
+    *state.child.lock().await = Some(child);
+    *state.port.lock().await = Some(port);
+    Ok(json!({ "running": true, "port": port }))
+}
+
+async fn stop_file_manager_command(state: Arc<FileManagerState>) -> Result<Value, String> {
+    state.stop().await;
+    Ok(json!({ "stopped": true }))
+}
+
+async fn proxy_file_manager_request(
+    method: &str,
+    path: &str,
+    body: Option<String>,
+    state: Arc<FileManagerState>,
+) -> Result<Value, String> {
+    let port = state.port.lock().await.ok_or_else(|| {
+        "file-manager is not running. Start it from the Apps folder first.".to_string()
+    })?;
+    let url = format!("http://127.0.0.1:{}{}", port, path);
+    let client = reqwest::Client::new();
+    let mut req = match method.to_uppercase().as_str() {
+        "POST" => client.post(&url),
+        "PUT" => client.put(&url),
+        "DELETE" => client.delete(&url),
+        _ => client.get(&url),
+    };
+    if let Some(b) = body {
+        req = req.header("content-type", "application/json").body(b);
+    }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("file-manager request failed: {}", e))?;
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| format!("file-manager response read failed: {}", e))?;
+    let json: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({ "raw": text }));
+    Ok(json)
 }

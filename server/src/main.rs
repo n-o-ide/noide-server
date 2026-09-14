@@ -149,6 +149,7 @@ fn main() {
         let port_forward = Arc::new(ws_server::PortForwardState::new());
         let code_vault = Arc::new(ws_server::CodeVaultState::new());
         let http_request = Arc::new(ws_server::HttpRequestState::new());
+        let file_manager = Arc::new(ws_server::FileManagerState::new());
 
         // Broadcast channel for graceful shutdown (Ctrl+C, server error, etc.).
         // Broadcast is used instead of oneshot because the sender needs to be
@@ -234,6 +235,7 @@ fn main() {
             port_forward.clone(),
             code_vault,
             http_request,
+            file_manager,
         );
 
         // Subscribe to the shutdown channel and wait for a signal.

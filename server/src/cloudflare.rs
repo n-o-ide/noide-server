@@ -163,10 +163,7 @@ pub async fn start_tunnel(port: u16) -> Result<(String, Child), String> {
                 .split_whitespace()
                 .find(|w| w.starts_with("https://") && w.contains("trycloudflare.com"))
             {
-                // Quick tunnels speak WebSocket over the tunnel, so the
-                // public URL is a wss:// endpoint, not https://.
-                let wss = url.replacen("https://", "wss://", 1);
-                break wss;
+                break url.to_string();
             }
         }
     };
