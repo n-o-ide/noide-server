@@ -46,7 +46,7 @@ jobs:
           if [ "${{ matrix.target }}" = "windows-x86_64" ]; then
             EXT=".exe"
           fi
-          for BIN in noide-server port-forward code-vault http-request file-manager; do
+          for BIN in noide-server port-forward code-vault http-request canvas-lab file-manager; do
             DIR="target/release"
             if [ "${{ matrix.target }}" = "darwin-x86_64" ]; then
               DIR="target/x86_64-apple-darwin/release"
@@ -65,6 +65,7 @@ jobs:
             port-forward-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
             code-vault-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
             http-request-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
+            canvas-lab-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
             file-manager-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
           if-no-files-found: error
 
@@ -79,7 +80,7 @@ jobs:
           merge-multiple: true
       - name: Generate SHA256SUMS
         working-directory: artifacts
-        run: sha256sum noide-server-* port-forward-* code-vault-* http-request-* file-manager-* | tee SHA256SUMS
+        run: sha256sum noide-server-* port-forward-* code-vault-* http-request-* canvas-lab-* file-manager-* | tee SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: checksums
@@ -100,7 +101,7 @@ jobs:
         working-directory: dist
         run: |
           test -f SHA256SUMS
-          for BIN in noide-server port-forward code-vault http-request file-manager; do
+          for BIN in noide-server port-forward code-vault http-request canvas-lab file-manager; do
             for t in linux-x86_64 linux-aarch64 darwin-x86_64 darwin-aarch64; do
               test -f "$BIN-$t" || { echo "missing $BIN-$t" >&2; exit 1; }
             done

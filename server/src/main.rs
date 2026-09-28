@@ -149,6 +149,7 @@ fn main() {
         let port_forward = Arc::new(ws_server::PortForwardState::new());
         let code_vault = Arc::new(ws_server::CodeVaultState::new());
         let http_request = Arc::new(ws_server::HttpRequestState::new());
+        let canvas_lab = Arc::new(ws_server::CanvasLabState::new());
         let file_manager = Arc::new(ws_server::FileManagerState::new());
 
         // Broadcast channel for graceful shutdown (Ctrl+C, server error, etc.).
@@ -235,6 +236,7 @@ fn main() {
             port_forward.clone(),
             code_vault,
             http_request,
+            canvas_lab,
             file_manager,
         );
 

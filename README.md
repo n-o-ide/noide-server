@@ -13,6 +13,7 @@ This repo also includes companion binaries:
 - **port-forward** — expose local ports via trycloudflare, localhost.run, or localtunnel
 - **code-vault** — save and manage code snippets with syntax highlighting
 - **http-request** — test APIs with folder organization and OpenAPI import
+- **canvas-lab** — create and manage Canvas Lab documents in the NoIDE app
 - **file-manager** — browse, upload, download, and manage files via a local HTTP server
 
 **Contents**
@@ -22,6 +23,7 @@ This repo also includes companion binaries:
 - [Port Forward](#port-forward)
 - [Code Vault](#code-vault)
 - [HTTP Request](#http-request)
+- [Canvas Lab](#canvas-lab)
 - [File Manager](#file-manager)
 - [Pair the NoIDE app](#pair-the-noide-app)
 - [Connect over the internet (wss)](#connect-over-the-internet-wss)
@@ -65,7 +67,7 @@ curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.s
 What it does: detects your OS/arch, downloads the matching binary from the
 latest stable release, verifies its SHA-256 checksum, and installs it to
 `~/.local/bin` (falling back to `/usr/local/bin`). Pass `--all` to install every
-companion binary too (port-forward, code-vault, http-request). Re-running the
+companion binaries too (port-forward, code-vault, http-request, canvas-lab, file-manager). Re-running the
 same command upgrades you to the newest version.
 
 Prefer inspecting scripts before piping them into a shell? That's reasonable:
@@ -93,6 +95,9 @@ bash install.sh --code-vault
 
 # Install http-request only
 bash install.sh --http-request
+
+# Install Canvas Lab only
+bash install.sh --canvas-lab
 
 # Install file-manager only
 bash install.sh --file-manager
@@ -521,9 +526,17 @@ update too (see below).
 
 ---
 
+## Canvas Lab
+
+**canvas-lab** is a companion binary for Canvas Lab documents in the NoIDE app.
+Install it by itself with `bash install.sh --canvas-lab`, or install all
+companion binaries with `bash install.sh --all`.
+
+---
+
 ## Build from source
 
-This repo is a Cargo workspace with five crates:
+This repo is a Cargo workspace with six crates:
 
 ```
 noide-server/
@@ -531,6 +544,7 @@ noide-server/
 ├── port-forward/    # port-forward binary
 ├── code-vault/      # code-vault binary
 ├── http-request/    # http-request binary
+├── canvas-lab/      # canvas-lab binary
 └── file-manager/    # file-manager binary
 ```
 
@@ -546,6 +560,7 @@ cargo build --release -p noide-server
 cargo build --release -p port-forward
 cargo build --release -p code-vault
 cargo build --release -p http-request
+cargo build --release -p canvas-lab
 cargo build --release -p file-manager
 ```
 
