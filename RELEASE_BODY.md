@@ -1,23 +1,30 @@
-## v0.4.1 — Zero-Install via npx & CI Stabilization
+## v0.4.2 — 1-Click Railway Deployment & Mandatory NioAI Agent Bundling
 
-Fixes CI formatting verification (`cargo fmt --check`), bumps version across all workspace crates and npm package, and stabilizes the automated release pipeline.
+Bumps version to `v0.4.2`, introduces 1-Click Railway cloud deployment with persistent storage volume support, auto-detects dynamic `$PORT` environments, and bundles the `nio-ai` agent into both `install.sh` and `npx noide-server` with reliable native curl fallbacks.
 
 ### Highlights
 
-- **`npx noide-server` (Zero-install launch):** Launch `noide-server` directly on any host, VPS, or desktop with a single command:
-  ```bash
-  npx noide-server
-  ```
-  Auto-detects OS & CPU architecture (Linux x86_64/ARM64, macOS Apple Silicon/Intel, Windows x86_64), downloads the verified native binary matching the release SHA-256 checksum, caches it locally, and launches the server.
-- **npm Package Distribution:** Published as [`noide-server`](https://www.npmjs.com/package/noide-server) on npm with a lightweight, zero-dependency native launcher.
-- **Code Formatting & CI Fix:** Fully formatted according to Rust style guidelines (`cargo fmt --check`) across all workspace crates.
-- **Process Group & Agent Lifecycle:** Improved Unix process group termination for background chat agents and companion processes to ensure clean teardown on exit.
-- **WebSocket Protocol & Sync Updates:** Core backend stability updates and crate optimizations synced from the primary monorepo.
-- **Automated Release Pipeline:** GitHub Actions packages and verifies checksums for all platform binaries (`noide-server`, `port-forward`, `code-vault`, `http-request`, `canvas-lab`, `file-manager`) and publishes to npm automatically.
+- **☁️ 1-Click Deploy to Railway:** Deploy your personal NoIDE cloud development server with a single click:
+  - Multi-stage Docker container with essential developer tooling (`git`, `bash`, `python3`, `nodejs`, `npm`, `openssh`).
+  - Persistent storage volume support at `/workspace` so cloned repositories and project files survive redeploys.
+  - Automatic dynamic `$PORT` binding and cloud platform detection (`RAILWAY_ENVIRONMENT`, `NOIDE_NO_CLOUDFLARE`).
+  - Pre-installed AI agent CLIs: `nio-ai`, `@kilocode/cli` (`kilo`), and `opencode-ai` (`opencode`).
+  - Single connection secret via `NOIDE_TOKEN` with automatic SSL termination (`wss://`).
+- **🤖 Mandatory NioAI Agent Bundling (`nio-ai`):**
+  - **`install.sh`:** Automatically checks and installs `nio-ai`. Tries `npm install -g nio-ai` first, then falls back directly to the native installer (`curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | bash`).
+  - **`npx noide-server`:** The zero-install npm runner verifies `nio` availability and provisions it into `~/.nio/bin/nio` with curl / PowerShell fallback if missing.
+  - **Backend Agent Search:** Added `~/.nio/bin` and `~/.cargo/bin` to `noide-server`'s native agent search directories, and added `install_agent` support for `nio-ai`.
+- **Crate & Monorepo Synchronization:** Synchronized and bumped all companion tools (`canvas-lab`, `code-vault`, `file-manager`, `http-request`, `port-forward`) to `v0.4.2`.
+
+---
 
 ### Install & Run
 
-#### Option 1: Via npx (Instant / Zero-install)
+#### Option 1: 1-Click Deploy on Railway
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/new?template=https%3A%2F%2Fgithub.com%2Fnio-labs%2Fnoide-server)
+
+#### Option 2: Via npx (Instant / Zero-install)
 
 ```bash
 npx noide-server
@@ -29,8 +36,8 @@ Pass any flags directly:
 # Persistent custom token
 npx noide-server --token my-secret-code
 
-# Disable automatic Cloudflare tunnel
-npx noide-server --no-cloudflare
+# Custom port
+npx noide-server --port 8080
 ```
 
 To install globally via npm:
@@ -40,7 +47,7 @@ npm install -g noide-server
 noide-server
 ```
 
-#### Option 2: Via curl install script
+#### Option 3: Via curl install script
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh | bash
@@ -48,7 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/nio-labs/noide-server/main/install.
 
 Pin a specific version:
 ```bash
-VERSION=0.4.1 bash install.sh
+VERSION=0.4.2 bash install.sh
 ```
 
 To install all companion binaries:
@@ -56,14 +63,7 @@ To install all companion binaries:
 bash install.sh --all
 ```
 
-Or install individually:
-```bash
-bash install.sh --port-forward
-bash install.sh --code-vault
-bash install.sh --http-request
-bash install.sh --canvas-lab
-bash install.sh --file-manager
-```
+---
 
 ### Assets
 
@@ -86,8 +86,8 @@ This release attaches pre-built native binaries for all components plus the `SHA
 Manual install:
 
 ```bash
-curl -fLO https://github.com/nio-labs/noide-server/releases/download/v0.4.1/noide-server-linux-x86_64
-curl -fLO https://github.com/nio-labs/noide-server/releases/download/v0.4.1/SHA256SUMS
+curl -fLO https://github.com/nio-labs/noide-server/releases/download/v0.4.2/noide-server-linux-x86_64
+curl -fLO https://github.com/nio-labs/noide-server/releases/download/v0.4.2/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/noide-server
 ```

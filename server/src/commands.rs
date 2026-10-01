@@ -1512,7 +1512,10 @@ pub async fn install_agent(command: String) -> Result<String, String> {
         }
         // Fallback: direct native curl installer
         let output = tokio::process::Command::new("sh")
-            .args(["-c", "curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | bash"])
+            .args([
+                "-c",
+                "curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | bash",
+            ])
             .kill_on_drop(true)
             .output()
             .await

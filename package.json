@@ -1,6 +1,6 @@
 {
   "name": "noide-server",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "The self-hosted backend for NoIDE — browser/mobile code editor and terminal",
   "main": "bin/noide-server.js",
   "bin": {
