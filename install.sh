@@ -204,23 +204,23 @@ fi
 
 install_nio() {
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "Would check and install NioAI agent (nio-ai)..." >&2
+    echo "Would check and install NioAI agent (@nio-labs/nio-ai)..." >&2
     return 0
   fi
 
-  echo "Checking NioAI agent (nio-ai)..." >&2
+  echo "Checking NioAI agent (@nio-labs/nio-ai)..." >&2
   if command -v nio >/dev/null 2>&1; then
     echo "NioAI is already installed ($(command -v nio))" >&2
     return 0
   fi
 
-  echo "Installing NioAI agent (nio-ai)..." >&2
+  echo "Installing NioAI agent (@nio-labs/nio-ai)..." >&2
   local INSTALLED=0
   if command -v npm >/dev/null 2>&1; then
-    echo "Attempting install via npm (npm install -g nio-ai)..." >&2
-    if npm install -g nio-ai >/dev/null 2>&1; then
+    echo "Attempting install via npm (npm install -g @nio-labs/nio-ai)..." >&2
+    if npm install -g @nio-labs/nio-ai >/dev/null 2>&1; then
       INSTALLED=1
-      echo "Installed nio-ai via npm" >&2
+      echo "Installed @nio-labs/nio-ai via npm" >&2
     fi
   fi
 
@@ -230,7 +230,7 @@ install_nio() {
       INSTALLED=1
       echo "Installed nio via native installer" >&2
     else
-      echo "warning: could not automatically install nio-ai. You can install it later with: npx nio-ai" >&2
+      echo "warning: could not automatically install @nio-labs/nio-ai. You can install it later with: npx @nio-labs/nio-ai" >&2
     fi
   fi
 }

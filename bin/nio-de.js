@@ -198,12 +198,12 @@ async function ensureNioBinary() {
     if (fs.existsSync(c)) return c;
   }
 
-  // 3. Not found — install nio-ai (npm first, then curl fallback)
-  console.log('[nio-de] Bundling required NioAI agent (nio-ai)...');
+  // 3. Not found — install @nio-labs/nio-ai (npm first, then curl fallback)
+  console.log('[nio-de] Bundling required NioAI agent (@nio-labs/nio-ai)...');
 
   // Attempt A: via npx / npm
   try {
-    execSync('npx -y nio-ai --version', { stdio: ['pipe', 'pipe', 'ignore'], timeout: 30000 });
+    execSync('npx -y @nio-labs/nio-ai --version', { stdio: ['pipe', 'pipe', 'ignore'], timeout: 30000 });
     for (const c of candidates) {
       if (fs.existsSync(c)) return c;
     }
@@ -226,8 +226,8 @@ async function ensureNioBinary() {
       if (fs.existsSync(c)) return c;
     }
   } catch (err) {
-    console.warn(`[nio-de] Warning: Could not automatically bundle nio-ai: ${err.message}`);
-    console.warn('[nio-de] You can install it manually with: npx nio-ai');
+    console.warn(`[nio-de] Warning: Could not automatically bundle @nio-labs/nio-ai: ${err.message}`);
+    console.warn('[nio-de] You can install it manually with: npx @nio-labs/nio-ai');
   }
 
   return null;

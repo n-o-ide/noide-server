@@ -66,7 +66,7 @@ Deploy your personal NioDE cloud development server in one click:
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/new?template=https%3A%2F%2Fgithub.com%2Fnio-labs%2Fnio-de)
 
 - **Persistent Volume:** Automatically mounts persistent storage at `/workspace` so code and git repos survive redeploys.
-- **Pre-bundled AI Agents:** Ready out of the box with `nio` (`nio-ai`), `kilo` (`@kilocode/cli`), and `opencode` (`opencode-ai`).
+- **Pre-bundled AI Agents:** Ready out of the box with `nio` (`@nio-labs/nio-ai`), `kilo` (`@kilocode/cli`), and `opencode` (`opencode-ai`).
 - **Free Automatic SSL:** Connect your NioDE client directly via `wss://<your-project>.up.railway.app/?token=<your-token>`.
 - **Security:** Set `NIO_DE_TOKEN` as your connection password during deployment.
 

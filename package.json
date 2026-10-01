@@ -1,6 +1,6 @@
 {
   "name": "@nio-labs/nio-de",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "The self-hosted backend for NioDE — browser/mobile code editor and terminal",
   "main": "bin/nio-de.js",
   "bin": {

@@ -5,8 +5,9 @@
 Product: NioDE. App: nio-labs/nio-de-app. Backend: nio-labs/nio-de.
 Local folders: nio-de-app and nio-de. Active branch: main.
 The merged rename-niode branches have been deleted locally and remotely.
-Backend/native/npm version: 0.5.1; supporting tools retain their versions.
-NioAI (`nio` / `nio-ai`) and OpenGuru remain unchanged.
+Backend/native/npm version: 0.5.2; supporting tools retain their versions.
+NioAI uses npm package `@nio-labs/nio-ai`; its command remains `nio`.
+NioDE installers and OpenGuru now install the scoped package.
 
 Shared backend/tool source is owned by nio-de-app; run from its root:
 

@@ -38,8 +38,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Pre-install AI agent CLIs (kilo, opencode, nio-ai)
-RUN npm install -g @kilocode/cli opencode-ai nio-ai
+# Pre-install AI agent CLIs (kilo, opencode, @nio-labs/nio-ai)
+RUN npm install -g @kilocode/cli opencode-ai @nio-labs/nio-ai
 
 # Also ensure native nio binary is installed in /usr/local/bin
 RUN curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | bash || true

@@ -1487,7 +1487,7 @@ pub fn agent_install_package(command: &str) -> Option<&'static str> {
     match command {
         "kilo" => Some("@kilocode/cli"),
         "opencode" => Some("opencode-ai"),
-        "nio" => Some("nio-ai"),
+        "nio" => Some("@nio-labs/nio-ai"),
         _ => None,
     }
 }
@@ -1500,7 +1500,7 @@ pub async fn install_agent(command: String) -> Result<String, String> {
         // Attempt npm global install first if available
         if let Some(npm) = which_npm() {
             if let Ok(output) = tokio::process::Command::new(&npm)
-                .args(["install", "-g", "nio-ai"])
+                .args(["install", "-g", "@nio-labs/nio-ai"])
                 .kill_on_drop(true)
                 .output()
                 .await
@@ -1585,7 +1585,7 @@ pub fn cli_missing_message(command: &str) -> String {
         other => other,
     };
     if command == "nio" {
-        return "NioAI CLI (`nio`) was not found. Install it with: npm install -g nio-ai (or curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | bash)".to_string();
+        return "NioAI CLI (`nio`) was not found. Install it with: npm install -g @nio-labs/nio-ai (or curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | bash)".to_string();
     }
     format!(
         "{} CLI (`{}`) was not found on your system PATH. Install it and make sure `{}` is available on your PATH, then retry.",
