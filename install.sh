@@ -200,6 +200,45 @@ if [ "$INSTALL_FILE_MANAGER" -eq 1 ]; then
   install_binary "file-manager"
 fi
 
+# --- Bundle NioAI agent (mandatory for AI chat) -------------------------------
+
+install_nio() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "Would check and install NioAI agent (nio-ai)..." >&2
+    return 0
+  fi
+
+  echo "Checking NioAI agent (nio-ai)..." >&2
+  if command -v nio >/dev/null 2>&1; then
+    echo "NioAI is already installed ($(command -v nio))" >&2
+    return 0
+  fi
+
+  echo "Installing NioAI agent (nio-ai)..." >&2
+  local INSTALLED=0
+  if command -v npm >/dev/null 2>&1; then
+    echo "Attempting install via npm (npm install -g nio-ai)..." >&2
+    if npm install -g nio-ai >/dev/null 2>&1; then
+      INSTALLED=1
+      echo "Installed nio-ai via npm" >&2
+    fi
+  fi
+
+  if [ "$INSTALLED" -eq 0 ]; then
+    echo "Attempting install via native installer (curl)..." >&2
+    if curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | bash; then
+      INSTALLED=1
+      echo "Installed nio via native installer" >&2
+    else
+      echo "warning: could not automatically install nio-ai. You can install it later with: npx nio-ai" >&2
+    fi
+  fi
+}
+
+if [ "$INSTALL_SERVER" -eq 1 ]; then
+  install_nio
+fi
+
 # --- Post-install notes --------------------------------------------------------
 
 case ":$PATH:" in
@@ -212,6 +251,9 @@ echo >&2
 if [ "$INSTALL_SERVER" -eq 1 ]; then
   echo "Start noide-server with:  ${INSTALL_DIR}/noide-server" >&2
   echo "It prints a pairing code + QR — enter it in the NoIDE app." >&2
+  if command -v nio >/dev/null 2>&1; then
+    echo "NioAI agent bundled:      $(command -v nio)" >&2
+  fi
 fi
 if [ "$INSTALL_PORT_FORWARD" -eq 1 ]; then
   echo "Start port-forward with:  ${INSTALL_DIR}/port-forward" >&2

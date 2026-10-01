@@ -1377,6 +1377,10 @@ fn agent_search_dirs(command: &str) -> Vec<std::path::PathBuf> {
         match command {
             "opencode" => dirs.push(home.join(".opencode/bin")),
             "kilo" => dirs.push(home.join(".kilo/bin")),
+            "nio" => {
+                dirs.push(home.join(".nio/bin"));
+                dirs.push(home.join(".cargo/bin"));
+            }
             _ => {}
         }
         // nvm versions of node put `kilo` on PATH via npm globals; check
@@ -1483,6 +1487,7 @@ pub fn agent_install_package(command: &str) -> Option<&'static str> {
     match command {
         "kilo" => Some("@kilocode/cli"),
         "opencode" => Some("opencode-ai"),
+        "nio" => Some("nio-ai"),
         _ => None,
     }
 }
@@ -1492,7 +1497,36 @@ pub fn agent_install_package(command: &str) -> Option<&'static str> {
 /// combined stdout/stderr so the frontend can show what happened.
 pub async fn install_agent(command: String) -> Result<String, String> {
     if command == "nio" {
-        return Err("NioAI is a native binary. Install the approved nio release on the server PATH; npm is not required. Automatic native installation will be enabled when release artifacts are published.".into());
+        // Attempt npm global install first if available
+        if let Some(npm) = which_npm() {
+            if let Ok(output) = tokio::process::Command::new(&npm)
+                .args(["install", "-g", "nio-ai"])
+                .kill_on_drop(true)
+                .output()
+                .await
+            {
+                if output.status.success() {
+                    return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+                }
+            }
+        }
+        // Fallback: direct native curl installer
+        let output = tokio::process::Command::new("sh")
+            .args(["-c", "curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | bash"])
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|e| format!("Failed to run native installer: {e}"))?;
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if output.status.success() {
+            return Ok(combined);
+        } else {
+            return Err(combined);
+        }
     }
     let pkg = agent_install_package(&command)
         .ok_or_else(|| format!("Don't know how to install agent '{}'", command))?;
@@ -1544,8 +1578,12 @@ pub fn cli_missing_message(command: &str) -> String {
     let name = match command {
         "kilo" => "Kilo Code",
         "opencode" => "OpenCode",
+        "nio" => "NioAI",
         other => other,
     };
+    if command == "nio" {
+        return "NioAI CLI (`nio`) was not found. Install it with: npm install -g nio-ai (or curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | bash)".to_string();
+    }
     format!(
         "{} CLI (`{}`) was not found on your system PATH. Install it and make sure `{}` is available on your PATH, then retry.",
         name, command, command

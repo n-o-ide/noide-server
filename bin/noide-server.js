@@ -177,9 +177,67 @@ async function ensureBinary() {
   return targetBinPath;
 }
 
+async function ensureNioBinary() {
+  // 1. Check system PATH
+  try {
+    const cmd = os.platform() === 'win32' ? 'where nio' : 'which nio';
+    const nioBin = execSync(cmd, { stdio: ['pipe', 'pipe', 'ignore'] }).toString().trim().split(/\r?\n/)[0];
+    if (nioBin && fs.existsSync(nioBin)) return nioBin;
+  } catch {}
+
+  // 2. Check canonical install locations
+  const isWin = os.platform() === 'win32';
+  const ext = isWin ? '.exe' : '';
+  const candidates = [
+    path.join(os.homedir(), '.nio', 'bin', `nio${ext}`),
+    path.join(os.homedir(), '.local', 'bin', `nio${ext}`),
+    path.join(os.homedir(), '.cargo', 'bin', `nio${ext}`)
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+
+  // 3. Not found — install nio-ai (npm first, then curl fallback)
+  console.log('[noide-server] Bundling required NioAI agent (nio-ai)...');
+
+  // Attempt A: via npx / npm
+  try {
+    execSync('npx -y nio-ai --version', { stdio: ['pipe', 'pipe', 'ignore'], timeout: 30000 });
+    for (const c of candidates) {
+      if (fs.existsSync(c)) return c;
+    }
+  } catch {}
+
+  // Attempt B: direct native curl/powershell fallback
+  try {
+    if (isWin) {
+      execSync('powershell -NoProfile -Command "irm https://raw.githubusercontent.com/nio-labs/nio/main/install.ps1 | iex"', {
+        stdio: ['pipe', 'inherit', 'inherit'],
+        timeout: 60000
+      });
+    } else {
+      execSync('curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | bash', {
+        stdio: ['pipe', 'inherit', 'inherit'],
+        timeout: 60000
+      });
+    }
+    for (const c of candidates) {
+      if (fs.existsSync(c)) return c;
+    }
+  } catch (err) {
+    console.warn(`[noide-server] Warning: Could not automatically bundle nio-ai: ${err.message}`);
+    console.warn('[noide-server] You can install it manually with: npx nio-ai');
+  }
+
+  return null;
+}
+
 async function main() {
   try {
     const binPath = await ensureBinary();
+    // Ensure NioAI agent is bundled and ready
+    await ensureNioBinary();
+
     const args = process.argv.slice(2);
 
     const child = spawn(binPath, args, {
@@ -215,3 +273,4 @@ async function main() {
 }
 
 main();
+
