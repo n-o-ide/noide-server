@@ -46,7 +46,7 @@ jobs:
           if [ "${{ matrix.target }}" = "windows-x86_64" ]; then
             EXT=".exe"
           fi
-          for BIN in noide-server port-forward code-vault http-request canvas-lab file-manager; do
+          for BIN in nio-de port-forward code-vault http-request canvas-lab file-manager; do
             DIR="target/release"
             if [ "${{ matrix.target }}" = "darwin-x86_64" ]; then
               DIR="target/x86_64-apple-darwin/release"
@@ -54,14 +54,20 @@ jobs:
             cp "$DIR/$BIN$EXT" "$BIN-${{ matrix.target }}$EXT"
             chmod +x "$BIN-${{ matrix.target }}$EXT"
           done
-      - name: Smoke test noide-server
+      - name: Package legacy artifact alias
+        run: |
+          EXT=""
+          if [ "${{ matrix.target }}" = "windows-x86_64" ]; then EXT=".exe"; fi
+          cp "nio-de-${{ matrix.target }}$EXT" "noide-server-${{ matrix.target }}$EXT"
+      - name: Smoke test nio-de
         if: runner.os == 'Linux'
-        run: node scripts/smoke-test.mjs "./noide-server-${{ matrix.target }}"
+        run: node scripts/smoke-test.mjs "./nio-de-${{ matrix.target }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
           path: |
             noide-server-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
+            nio-de-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
             port-forward-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
             code-vault-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
             http-request-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
@@ -80,7 +86,7 @@ jobs:
           merge-multiple: true
       - name: Generate SHA256SUMS
         working-directory: artifacts
-        run: sha256sum noide-server-* port-forward-* code-vault-* http-request-* canvas-lab-* file-manager-* | tee SHA256SUMS
+        run: sha256sum nio-de-* noide-server-* port-forward-* code-vault-* http-request-* canvas-lab-* file-manager-* | tee SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: checksums
@@ -101,7 +107,7 @@ jobs:
         working-directory: dist
         run: |
           test -f SHA256SUMS
-          for BIN in noide-server port-forward code-vault http-request canvas-lab file-manager; do
+          for BIN in nio-de port-forward code-vault http-request canvas-lab file-manager; do
             for t in linux-x86_64 linux-aarch64 darwin-x86_64 darwin-aarch64; do
               test -f "$BIN-$t" || { echo "missing $BIN-$t" >&2; exit 1; }
             done
@@ -130,4 +136,8 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           npm version "$VERSION" --no-git-tag-version --allow-same-version
+          npm publish --access public
+          cd compat/noide-server
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          npm pkg set "dependencies.nio-de=$VERSION"
           npm publish --access public

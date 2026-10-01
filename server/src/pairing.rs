@@ -29,7 +29,7 @@ pub fn generate_code() -> String {
 pub fn print_pairing(code: &str) {
     eprintln!();
     eprintln!("=====================================================");
-    eprintln!("  NoIDE pairing required");
+    eprintln!("  NioDE pairing required");
     eprintln!();
     eprintln!("  Connect from the app and enter this code:");
     eprintln!();

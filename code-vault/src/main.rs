@@ -302,7 +302,7 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     let local_addr = listener.local_addr().unwrap();
 
-    // Print the port so noide-server can discover it.
+    // Print the port so nio-de can discover it.
     println!("CODE_VAULT_PORT={}", local_addr.port());
 
     tracing::info!("code-vault listening on {}", local_addr);

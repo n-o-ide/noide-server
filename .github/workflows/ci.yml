@@ -55,6 +55,6 @@ jobs:
           else
             cargo build --locked
           fi
-      - name: Smoke test noide-server (handshake + pairing auth)
+      - name: Smoke test nio-de (handshake + pairing auth)
         if: runner.os == 'Linux'
-        run: node scripts/smoke-test.mjs target/debug/noide-server
+        run: node scripts/smoke-test.mjs target/debug/nio-de

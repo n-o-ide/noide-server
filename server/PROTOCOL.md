@@ -1,7 +1,7 @@
-# NoIDE WebSocket Protocol
+# NioDE WebSocket Protocol
 
 The contract between the frontend (`web/`) and the server (`server/`, the
-`noide-server` binary). Every feature — file tree, editor, terminal, git,
+`nio-de` binary). Every feature — file tree, editor, terminal, git,
 chat — speaks only this protocol; the UI never assumes it runs on the same
 machine as the server.
 
@@ -17,14 +17,14 @@ Source of truth:
 
 - Plain WebSocket, text frames, UTF-8 JSON.
 - Default endpoint: `ws://0.0.0.0:1421` (bind address override via the
-  `NOTERM_WS_ADDR` env var, e.g. `127.0.0.1:1421`).
+  `NIO_DE_WS_ADDR` env var, e.g. `127.0.0.1:1421`).
 - Endpoint selection (client): user-configured `serverWsUrl` setting →
   `VITE_WS_URL` env → `ws://<current-host>:1421` (or `ws://127.0.0.1:1421`
   for loopback hosts).
 
 ### Authentication
 
-`noide-server` runs in one of three auth modes. In every protected mode the
+`nio-de` runs in one of three auth modes. In every protected mode the
 client presents a token as a query parameter on the WebSocket URL; a missing
 or wrong token rejects the upgrade with HTTP `401`, which browsers surface as
 a connection error. Tokens are compared in constant time.
@@ -37,7 +37,7 @@ wss://host:1421/?token=<value>
 | Mode | How to start | Client behavior |
 |---|---|---|
 | **Pairing (default)** | no flags | Server prints a fresh `XXXX-XXXX` code plus an ASCII QR at startup. Enter the code in the app (connect screen → *Pairing code*, or Settings → Server (Pairing Code)). The code is ephemeral — valid until the server exits, never stored — so a restart mints a new one. |
-| **Fixed token** | `--token <value>` or `NOIDE_TOKEN` | Use that value as the token. Survives restarts (it is your secret). |
+| **Fixed token** | `--token <value>` or `NIO_DE_TOKEN` | Use that value as the token. Survives restarts (it is your secret). |
 | **No auth** | `--no-auth` | Server accepts unauthenticated connections and prints a loud warning. For localhost development / CI only. |
 
 The QR encodes the bare code text (nothing else), so scanning later — e.g. a

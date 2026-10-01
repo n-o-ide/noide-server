@@ -95,7 +95,7 @@ impl AgentServerManager {
                     return Ok((h.port, h.studio_workdir.clone()));
                 }
                 // Server died since we started it — drop it and respawn below.
-                eprintln!("[NoIDE] {} server no longer alive; respawning", agent);
+                eprintln!("[NioDE] {} server no longer alive; respawning", agent);
             }
         }
         self.servers.lock().unwrap().remove(&key);

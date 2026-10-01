@@ -504,7 +504,8 @@ pub async fn start(
     // Reap exited or long-abandoned sessions so shells never leak as
     // orphans on the host (a session with no subscriber is kept alive for
     // REAP_UNATTACHED so reconnects and reattaches keep working).
-    let reap_unattached = std::env::var("NOIDE_PTY_KEEP_ALIVE")
+    let reap_unattached = std::env::var("NIO_DE_PTY_KEEP_ALIVE")
+        .or_else(|_| std::env::var("NOIDE_PTY_KEEP_ALIVE"))
         .ok()
         .and_then(|v| v.trim().parse::<u64>().ok())
         .map(std::time::Duration::from_secs)
@@ -523,7 +524,7 @@ pub async fn start(
     }
 
     let listener = TcpListener::bind(addr).await?;
-    eprintln!("[NoIDE] WebSocket PTY server listening on ws://{}", addr);
+    eprintln!("[NioDE] WebSocket PTY server listening on ws://{}", addr);
     loop {
         let (stream, _) = listener.accept().await?;
         let pty = pty.clone();
@@ -554,7 +555,7 @@ pub async fn start(
             )
             .await
             {
-                eprintln!("[NoIDE] WS connection error: {}", e);
+                eprintln!("[NioDE] WS connection error: {}", e);
             }
         });
     }
@@ -681,13 +682,13 @@ async fn handle_connection(
     loop {
         let since = last_activity.lock().unwrap().elapsed();
         if since >= idle_limit {
-            eprintln!("[NoIDE] idle timeout; closing connection");
+            eprintln!("[NioDE] idle timeout; closing connection");
             break;
         }
         let timeout = tokio::time::sleep(idle_limit - since);
         let next = tokio::select! {
             msg = reader.next() => msg,
-            _ = timeout => { eprintln!("[NoIDE] idle timeout; closing connection"); break; }
+            _ = timeout => { eprintln!("[NioDE] idle timeout; closing connection"); break; }
         };
         *last_activity.lock().unwrap() = Instant::now();
         let msg = match next {
@@ -788,12 +789,12 @@ async fn handle_connection(
                     s.in_bytes += data.len() as u64;
                 }
                 eprintln!(
-                    "[NoIDE] binary frame received: {} bytes, first byte: 0x{:02x}",
+                    "[NioDE] binary frame received: {} bytes, first byte: 0x{:02x}",
                     data.len(),
                     data.first().unwrap_or(&0)
                 );
                 if data.len() < 5 {
-                    eprintln!("[NoIDE] binary frame too short: {} bytes", data.len());
+                    eprintln!("[NioDE] binary frame too short: {} bytes", data.len());
                     continue;
                 }
                 let frame_type = data[0];
@@ -803,7 +804,7 @@ async fn handle_connection(
                 let sid_len = u32::from_le_bytes([data[1], data[2], data[3], data[4]]) as usize;
                 if data.len() < 5 + 4 + sid_len {
                     eprintln!(
-                        "[NoIDE] binary frame malformed: data.len()={}, 5+4+sid_len={}",
+                        "[NioDE] binary frame malformed: data.len()={}, 5+4+sid_len={}",
                         data.len(),
                         5 + 4 + sid_len
                     );
@@ -812,13 +813,13 @@ async fn handle_connection(
                 let session_id = match std::str::from_utf8(&data[5..5 + sid_len]) {
                     Ok(s) => s.to_string(),
                     Err(_) => {
-                        eprintln!("[NoIDE] binary frame: invalid session id UTF-8");
+                        eprintln!("[NioDE] binary frame: invalid session id UTF-8");
                         continue;
                     }
                 };
                 let payload = &data[5 + sid_len..];
                 eprintln!(
-                    "[NoIDE] binary pty_write: session={}, payload_len={}",
+                    "[NioDE] binary pty_write: session={}, payload_len={}",
                     session_id,
                     payload.len()
                 );
@@ -849,7 +850,7 @@ async fn handle_connection(
     {
         let s = stats.lock().unwrap();
         eprintln!(
-            "[NoIDE] connection closed: {} frames ({} bin / {} txt), {} raw -> {} wire bytes ({:.1}x), {} pty-exits, {} msgs in",
+            "[NioDE] connection closed: {} frames ({} bin / {} txt), {} raw -> {} wire bytes ({:.1}x), {} pty-exits, {} msgs in",
             s.out_frames,
             s.out_binary,
             s.out_text,
@@ -1973,7 +1974,7 @@ fn find_port_forward_binary() -> Option<std::path::PathBuf> {
         }
     }
 
-    // 2. Dev fallback: look next to noide-server in the project tree.
+    // 2. Dev fallback: look next to nio-de in the project tree.
     //    Workspace layout: server/ and port-forward/ are siblings.
     let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     if let Some(project_root) = server_dir.parent() {
@@ -2012,7 +2013,7 @@ fn is_port_forward_on_path() -> bool {
 /// Strategy:
 ///   1. If already on PATH and not forced, return immediately.
 ///   2. If forced, skip the PATH check and build from local source.
-///   3. Otherwise, download install.sh from nio-labs/noide-server and run `bash install.sh --port-forward`.
+///   3. Otherwise, download install.sh from nio-labs/nio-de and run `bash install.sh --port-forward`.
 ///   4. If remote install fails, fall back to `cargo install --path ../port-forward`
 ///      (local dev build from the workspace source).
 async fn install_port_forward_command(force: bool) -> Result<Value, String> {
@@ -2049,7 +2050,7 @@ async fn install_port_forward_command(force: bool) -> Result<Value, String> {
 async fn install_port_forward_remote() -> Result<Value, String> {
     use std::process::Stdio;
 
-    let install_url = "https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh";
+    let install_url = "https://raw.githubusercontent.com/nio-labs/nio-de/main/install.sh";
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
 
     let curl_output = tokio::process::Command::new("curl")
@@ -2107,7 +2108,7 @@ async fn install_port_forward_local() -> Result<Value, String> {
     if !port_forward_dir.join("Cargo.toml").exists() {
         return Err(format!(
             "Local port-forward source not found at {}. \
-             Install it manually or ensure the noide-server repo is cloned with port-forward/.",
+             Install it manually or ensure the nio-de repo is cloned with port-forward/.",
             port_forward_dir.display()
         ));
     }
@@ -2241,7 +2242,7 @@ async fn install_code_vault_command(force: bool) -> Result<Value, String> {
 
 async fn install_code_vault_remote() -> Result<Value, String> {
     use std::process::Stdio;
-    let install_url = "https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh";
+    let install_url = "https://raw.githubusercontent.com/nio-labs/nio-de/main/install.sh";
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
     let curl_output = tokio::process::Command::new("curl")
         .args([
@@ -2416,7 +2417,9 @@ fn find_canvas_lab_binary() -> Option<std::path::PathBuf> {
     if let Some(path) = std::env::var_os("PATH") {
         search_dirs.extend(std::env::split_paths(&path));
     }
-    if let Some(dir) = std::env::var_os("NOIDE_INSTALL_DIR") {
+    if let Some(dir) =
+        std::env::var_os("NIO_DE_INSTALL_DIR").or_else(|| std::env::var_os("NOIDE_INSTALL_DIR"))
+    {
         search_dirs.push(dir.into());
     }
     if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {
@@ -2459,7 +2462,7 @@ async fn install_canvas_lab_command(force: bool) -> Result<Value, String> {
         let download = tokio::process::Command::new("curl")
             .args([
                 "-fsSL",
-                "https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh",
+                "https://raw.githubusercontent.com/nio-labs/nio-de/main/install.sh",
                 "-o",
                 script_path.to_str().unwrap_or(""),
             ])
@@ -2686,7 +2689,7 @@ async fn install_http_request_command(force: bool) -> Result<Value, String> {
 
 async fn install_http_request_remote() -> Result<Value, String> {
     use std::process::Stdio;
-    let install_url = "https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh";
+    let install_url = "https://raw.githubusercontent.com/nio-labs/nio-de/main/install.sh";
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
     let curl_output = tokio::process::Command::new("curl")
         .args([
@@ -2983,7 +2986,7 @@ fn find_file_manager_binary() -> Option<std::path::PathBuf> {
             }
         }
     }
-    // 2. Dev fallback: look next to noide-server in the project tree.
+    // 2. Dev fallback: look next to nio-de in the project tree.
     let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     if let Some(project_root) = server_dir.parent() {
         let fm_dir = project_root.join("file-manager");
@@ -3025,7 +3028,7 @@ async fn install_file_manager_command(force: bool) -> Result<Value, String> {
 
 async fn install_file_manager_remote() -> Result<Value, String> {
     use std::process::Stdio;
-    let install_url = "https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh";
+    let install_url = "https://raw.githubusercontent.com/nio-labs/nio-de/main/install.sh";
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
     let curl_output = tokio::process::Command::new("curl")
         .args([

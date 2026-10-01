@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke test for noide-server. Verifies, against a real binary:
+// Smoke test for nio-de. Verifies, against a real binary:
 //   1. `--version` prints semver.
 //   2. Pairing mode (default): the printed code opens a WS; no/wrong code rejected.
 //   3. `--no-auth`: connections accepted without a token.
@@ -7,7 +7,7 @@
 //
 // No dependencies: performs the WebSocket handshake with a raw `net` socket.
 //
-// Usage: node scripts/smoke-test.mjs <path-to-noide-server-binary>
+// Usage: node scripts/smoke-test.mjs <path-to-nio-de-binary>
 
 import { spawn } from 'node:child_process'
 import net from 'node:net'
@@ -15,12 +15,12 @@ import crypto from 'node:crypto'
 
 const BIN = process.argv[2]
 if (!BIN) {
-  console.error('usage: node scripts/smoke-test.mjs <path-to-noide-server-binary>')
+  console.error('usage: node scripts/smoke-test.mjs <path-to-nio-de-binary>')
   process.exit(2)
 }
 
 const CODE_RE = /\b([A-Z2-9]{4}-[A-Z2-9]{4})\b/
-const LOG_PREFIX = '[NoIDE]'
+const LOG_PREFIX = '[NioDE]'
 
 let failures = 0
 const check = (name, ok, detail = '') => {
@@ -59,20 +59,24 @@ function probe(port, path = '') {
 
 // --- Server lifecycle -----------------------------------------------------------
 
-function startServer(extraArgs = [], port) {
-  const proc = spawn(BIN, [...extraArgs], {
-    env: { ...process.env, NOTERM_WS_ADDR: `127.0.0.1:${port}` },
+function startServer(extraArgs = [], port, overrides = {}) {
+  const env = { ...process.env };
+  for (const key of ["NOIDE_TOKEN", "NIO_DE_TOKEN", "NOTERM_WS_ADDR", "NIO_DE_WS_ADDR", "NOIDE_PTY_KEEP_ALIVE", "NIO_DE_PTY_KEEP_ALIVE"]) delete env[key];
+  const proc = spawn(BIN, ["--no-cloudflare", ...extraArgs], {
+    env: { ...env, NIO_DE_WS_ADDR: `127.0.0.1:${port}`, ...overrides },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let stderr = ''
-  let resolveListening, resolveExit
-  const listening = new Promise((r) => { resolveListening = r })
+  let resolveListening, rejectListening, resolveExit
+  const listening = new Promise((r, reject) => { resolveListening = r; rejectListening = reject })
+  const deadline = setTimeout(() => { proc.kill(); rejectListening(new Error("server did not listen within 10 seconds")) }, 10000)
   const exited = new Promise((r) => { resolveExit = r })
   proc.stderr.on('data', (d) => {
     stderr += d.toString()
-    if (stderr.includes('listening on ws://')) resolveListening()
+    if (stderr.includes('listening on ws://')) { clearTimeout(deadline); resolveListening() }
   })
-  proc.on('exit', (code) => resolveExit(code))
+  proc.on('error', (error) => { clearTimeout(deadline); rejectListening(error) })
+  proc.on('exit', (code) => { clearTimeout(deadline); resolveExit(code); rejectListening(new Error(`server exited: ${code}`)) })
   return {
     proc,
     port,
@@ -96,7 +100,7 @@ async function main() {
   let out = ''
   v.stdout.on('data', (d) => { out += d })
   const versionCode = await new Promise((r) => v.on('exit', r))
-  const m = out.trim().match(/^noide-server (\d+\.\d+\.\d+)/)
+  const m = out.trim().match(/^nio-de (\d+\.\d+\.\d+)/)
   check('--version prints semver', versionCode === 0 && !!m, `got "${out.trim()}"`)
 
   // --- 2. Pairing (default) -------------------------------------------------------
@@ -124,6 +128,26 @@ async function main() {
   check('wrong token -> rejected', (await probe(s3.port, '/?token=wrong')) !== 'open')
   check('correct token -> open', (await probe(s3.port, '/?token=fixed-tok-1')) === 'open')
   await s3.stop()
+
+  console.log('environment compatibility:')
+  const legacyPort = randPort()
+  const cases = [
+    ['new token overrides legacy token', [], { NIO_DE_TOKEN: 'new-token', NOIDE_TOKEN: 'old-token' }, 'new-token', 'old-token'],
+    ['legacy token still works', [], { NOIDE_TOKEN: 'old-token' }, 'old-token', 'wrong'],
+    ['CLI token overrides both env names', ['--token', 'cli-token'], { NIO_DE_TOKEN: 'new-token', NOIDE_TOKEN: 'old-token' }, 'cli-token', 'new-token'],
+    ['new bind address overrides legacy', [], { NOTERM_WS_ADDR: 'invalid-address', NIO_DE_TOKEN: 'new-token' }, 'new-token', 'wrong'],
+    ['legacy bind address still works', [], { NIO_DE_WS_ADDR: undefined, NOTERM_WS_ADDR: `127.0.0.1:${legacyPort}`, NOIDE_TOKEN: 'old-token' }, 'old-token', 'wrong', legacyPort],
+  ]
+  for (const [name, args, env, accepted, rejected, fixedPort] of cases) {
+    const server = startServer(args, fixedPort || randPort(), env)
+    try {
+      await server.listening
+      check(name, (await probe(server.port, `/?token=${accepted}`)) === 'open')
+      check(`${name}: other token rejected`, (await probe(server.port, `/?token=${rejected}`)) !== 'open')
+    } finally {
+      await server.stop()
+    }
+  }
 
   console.log(failures === 0 ? '\nSMOKE TEST PASSED' : `\nSMOKE TEST FAILED (${failures})`)
   process.exit(failures === 0 ? 0 : 1)

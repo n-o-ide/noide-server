@@ -65,4 +65,4 @@ jobs:
           fi
       - name: Smoke test (handshake + pairing auth)
         if: runner.os == 'Linux'
-        run: node scripts/smoke-test.mjs target/debug/noide-server
+        run: node scripts/smoke-test.mjs target/debug/nio-de

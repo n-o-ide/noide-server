@@ -488,7 +488,7 @@ pub fn git_stash_list(path: String) -> Result<Vec<GitStashInfo>, String> {
 
 /// Stash all changes, including untracked files.
 pub fn git_stash(path: String) -> Result<String, String> {
-    run_git(&path, &["stash", "push", "-u", "-m", "WIP from NoIDE"])
+    run_git(&path, &["stash", "push", "-u", "-m", "WIP from NioDE"])
 }
 
 /// Pop the most recent stash, restoring its changes.

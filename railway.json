@@ -4,7 +4,7 @@
     "builder": "DOCKERFILE"
   },
   "deploy": {
-    "startCommand": "noide-server",
+    "startCommand": "nio-de",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }

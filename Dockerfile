@@ -3,7 +3,7 @@
 # ==============================================================================
 FROM rust:1.80-slim-bookworm AS builder
 
-WORKDIR /usr/src/noide-server
+WORKDIR /usr/src/nio-de
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy workspace sources
 COPY . .
 
-# Build release binary for noide-server
-RUN cargo build --release --bin noide-server
+# Build release binary for nio-de
+RUN cargo build --release --bin nio-de --bin noide-server
 
 # ==============================================================================
 # Stage 2: Runtime image
@@ -44,8 +44,9 @@ RUN npm install -g @kilocode/cli opencode-ai nio-ai
 # Also ensure native nio binary is installed in /usr/local/bin
 RUN curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | bash || true
 
-# Copy compiled noide-server binary
-COPY --from=builder /usr/src/noide-server/target/release/noide-server /usr/local/bin/noide-server
+# Copy compiled nio-de binary
+COPY --from=builder /usr/src/nio-de/target/release/nio-de /usr/local/bin/nio-de
+COPY --from=builder /usr/src/nio-de/target/release/noide-server /usr/local/bin/noide-server
 
 # Set up persistent workspace volume
 RUN mkdir -p /workspace /root/.local/bin /root/.nio/bin
@@ -53,11 +54,11 @@ WORKDIR /workspace
 
 # Default environment configuration
 ENV PORT=1421 \
-    NOTERM_WS_ADDR=0.0.0.0:1421 \
-    NOIDE_NO_CLOUDFLARE=true \
+    NIO_DE_WS_ADDR=0.0.0.0:1421 \
+    NIO_DE_NO_CLOUDFLARE=true \
     HOME=/root \
     PATH=/root/.local/bin:/root/.nio/bin:/usr/local/bin:$PATH
 
 EXPOSE 1421
 
-CMD ["noide-server"]
+CMD ["nio-de"]
