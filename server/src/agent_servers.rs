@@ -83,7 +83,11 @@ impl AgentServerManager {
         api_key: &str,
         studio: bool,
     ) -> Result<(u16, Option<std::path::PathBuf>), String> {
-        let key = if studio { format!("{}:studio", agent) } else { agent.to_string() };
+        let key = if studio {
+            format!("{}:studio", agent)
+        } else {
+            agent.to_string()
+        };
         {
             let guard = self.servers.lock().unwrap();
             if let Some(h) = guard.get(&key) {
@@ -116,9 +120,15 @@ impl AgentServerManager {
         if let Some(dir) = &studio_workdir {
             cmd.current_dir(dir);
             if agent == "kilo" {
-                cmd.env("KILO_CONFIG_CONTENT", r#"{"mode":"ask","permission":{"*":"deny"}}"#);
+                cmd.env(
+                    "KILO_CONFIG_CONTENT",
+                    r#"{"mode":"ask","permission":{"*":"deny"}}"#,
+                );
             } else if agent == "opencode" {
-                cmd.env("OPENCODE_CONFIG_CONTENT", r#"{"permission":{"*":"deny"},"agent":{"plan":{"permission":{"*":"deny"}}}}"#);
+                cmd.env(
+                    "OPENCODE_CONFIG_CONTENT",
+                    r#"{"permission":{"*":"deny"},"agent":{"plan":{"permission":{"*":"deny"}}}}"#,
+                );
             }
         }
         // Own process group so a later kill can tear down the whole server tree.
@@ -153,7 +163,9 @@ impl AgentServerManager {
         cmd.env_remove("CLICOLOR_FORCE");
 
         let mut child = cmd.spawn().map_err(|e| {
-            if let Some(dir) = &studio_workdir { let _ = std::fs::remove_dir_all(dir); }
+            if let Some(dir) = &studio_workdir {
+                let _ = std::fs::remove_dir_all(dir);
+            }
             format!("Failed to start {} server: {}", agent, e)
         })?;
         let pid = child
@@ -213,10 +225,14 @@ impl AgentServerManager {
             }
         });
 
-        self.servers
-            .lock()
-            .unwrap()
-            .insert(key, ServerHandle { port, pid, studio_workdir: studio_workdir.clone() });
+        self.servers.lock().unwrap().insert(
+            key,
+            ServerHandle {
+                port,
+                pid,
+                studio_workdir: studio_workdir.clone(),
+            },
+        );
         Ok((port, studio_workdir))
     }
 }

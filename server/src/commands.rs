@@ -1175,7 +1175,9 @@ async fn query_agent_models(models_url: &str, api_key: &str) -> Result<Vec<ChatM
 /// OpenAI-compatible `/v1/models` endpoint directly. The API key is supplied by
 /// the client (the chat panel's API-key field), not read from local config.
 pub async fn chat_models(agent: String, api_key: String) -> Result<Vec<ChatModel>, String> {
-    if agent.trim() == "nio" { return nio_models(api_key).await; }
+    if agent.trim() == "nio" {
+        return nio_models(api_key).await;
+    }
     let url = agent_models_url(agent.trim()).ok_or_else(|| format!("Unknown agent '{}'", agent))?;
 
     query_agent_models(url, &api_key).await
@@ -1184,14 +1186,19 @@ pub async fn chat_models(agent: String, api_key: String) -> Result<Vec<ChatModel
 pub async fn nio_models(api_key: String) -> Result<Vec<ChatModel>, String> {
     let exe = resolve_agent_bin("nio").ok_or_else(|| cli_missing_message("nio"))?;
     let mut cmd = tokio::process::Command::new(exe);
-    cmd.args(["models", "--format", "json"]).stdin(std::process::Stdio::null()).kill_on_drop(true);
+    cmd.args(["models", "--format", "json"])
+        .stdin(std::process::Stdio::null())
+        .kill_on_drop(true);
     // Catalog keys are selected by Nio's provider configuration. A chat override
     // must never be broadcast to every configured catalog endpoint.
     let _ = api_key;
-    let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await
+    let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output())
+        .await
         .map_err(|_| "Nio model discovery timed out".to_string())?
         .map_err(|e| format!("Nio model discovery failed: {e}"))?;
-    if !output.status.success() { return Err(String::from_utf8_lossy(&output.stderr).trim().to_string()); }
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
     serde_json::from_slice(&output.stdout).map_err(|e| format!("Invalid Nio model catalog: {e}"))
 }
 
@@ -1282,24 +1289,39 @@ impl CliStatus {
 fn looks_like_agent(exe: &std::path::Path, command: &str) -> bool {
     if command == "nio" {
         use std::io::Read;
-        let mut child = match std::process::Command::new(exe).arg("--version")
-            .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null()).spawn() {
-            Ok(child) => child, Err(_) => return false,
+        let mut child = match std::process::Command::new(exe)
+            .arg("--version")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(_) => return false,
         };
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
         loop {
             match child.try_wait() {
                 Ok(Some(status)) => {
                     let mut text = String::new();
-                    if !status.success() { return false; }
+                    if !status.success() {
+                        return false;
+                    }
                     if let Some(stdout) = child.stdout.take() {
-                        if stdout.take(4096).read_to_string(&mut text).is_err() { return false; }
+                        if stdout.take(4096).read_to_string(&mut text).is_err() {
+                            return false;
+                        }
                     }
                     return text.trim().starts_with("nio ") && text.contains("(NioAI)");
                 }
-                Ok(None) if std::time::Instant::now() < deadline => std::thread::sleep(std::time::Duration::from_millis(20)),
-                _ => { let _ = child.kill(); let _ = child.wait(); return false; }
+                Ok(None) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(20))
+                }
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return false;
+                }
             }
         }
     }
@@ -1820,23 +1842,43 @@ pub fn get_cwd() -> Result<String, String> {
 
 /// Nio accepts only bounded UTF-8 text attachments. Private, unique temp files
 /// avoid collisions with simultaneous requests and existing symlinks.
-pub fn write_nio_attachment_files(attachments: &[ChatAttachmentInput]) -> Result<Vec<PathBuf>, String> {
+pub fn write_nio_attachment_files(
+    attachments: &[ChatAttachmentInput],
+) -> Result<Vec<PathBuf>, String> {
     use std::io::Write;
     let mut total = 0usize;
     for att in attachments {
-        if att.base64.is_some() || att.content.is_none() { return Err("NioAI accepts UTF-8 text attachments only".into()); }
+        if att.base64.is_some() || att.content.is_none() {
+            return Err("NioAI accepts UTF-8 text attachments only".into());
+        }
         total = total.saturating_add(att.content.as_ref().map_or(0, String::len));
-        if total > 24 * 1024 || attachments.len() > 16 { return Err("Nio attachments exceed the 24 KiB / 16-file limit".into()); }
+        if total > 24 * 1024 || attachments.len() > 16 {
+            return Err("Nio attachments exceed the 24 KiB / 16-file limit".into());
+        }
     }
-    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
     let mut paths = Vec::new();
     for (i, att) in attachments.iter().enumerate() {
-        let path = std::env::temp_dir().join(format!("noide-nio-{}-{nonce}-{i}.txt", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("noide-nio-{}-{nonce}-{i}.txt", std::process::id()));
         let mut options = std::fs::OpenOptions::new();
         options.write(true).create_new(true);
-        #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
-        let result = options.open(&path).and_then(|mut f| f.write_all(att.content.as_deref().unwrap_or_default().as_bytes()));
-        if let Err(error) = result { let _ = std::fs::remove_file(&path); cleanup_attachment_files(&paths); return Err(error.to_string()); }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let result = options
+            .open(&path)
+            .and_then(|mut f| f.write_all(att.content.as_deref().unwrap_or_default().as_bytes()));
+        if let Err(error) = result {
+            let _ = std::fs::remove_file(&path);
+            cleanup_attachment_files(&paths);
+            return Err(error.to_string());
+        }
         paths.push(path);
     }
     Ok(paths)

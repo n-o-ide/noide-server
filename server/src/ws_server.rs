@@ -1261,7 +1261,9 @@ async fn handle(
         }
         "chat_stream" => {
             let command: String = arg(args, "command")?;
-            if !matches!(command.as_str(), "kilo" | "opencode" | "nio") { return Err("Unsupported chat agent".into()); }
+            if !matches!(command.as_str(), "kilo" | "opencode" | "nio") {
+                return Err("Unsupported chat agent".into());
+            }
             let cmd_args: Vec<String> = opt_arg(args, "args").unwrap_or_default();
             let cwd: Option<String> = opt_arg(args, "cwd");
             let api_key: String = opt_arg(args, "apiKey").unwrap_or_default();
@@ -1346,7 +1348,11 @@ async fn handle(
                 // Materialize attachment contents to temp files and pass them via
                 // the CLI's native `-f/--file` flag instead of inlining huge
                 // base64 blobs into the (size-limited) prompt argument.
-                let attachment_result = if command == "nio" { commands::write_nio_attachment_files(&attachments) } else { commands::write_attachment_files(&attachments) };
+                let attachment_result = if command == "nio" {
+                    commands::write_nio_attachment_files(&attachments)
+                } else {
+                    commands::write_attachment_files(&attachments)
+                };
                 let attachment_paths = match attachment_result {
                     Ok(p) => p,
                     Err(e) => {
@@ -1364,11 +1370,19 @@ async fn handle(
                         return;
                     }
                     let prompt = cmd_args.pop().unwrap_or_default();
-                    for path in &attachment_paths { cmd_args.extend(["--file".into(), path.to_string_lossy().into_owned()]); }
+                    for path in &attachment_paths {
+                        cmd_args.extend(["--file".into(), path.to_string_lossy().into_owned()]);
+                    }
                     // Highest precedence mode flags are supplied by the backend.
-                    let nio_mode = match mode.as_deref() { Some("build") => "build", Some("plan") => "plan", _ => "ask" };
+                    let nio_mode = match mode.as_deref() {
+                        Some("build") => "build",
+                        Some("plan") => "plan",
+                        _ => "ask",
+                    };
                     cmd_args.extend(["--mode".into(), nio_mode.into()]);
-                    if mode.as_deref() == Some("studio") { cmd_args.push("--no-tools".into()); }
+                    if mode.as_deref() == Some("studio") {
+                        cmd_args.push("--no-tools".into());
+                    }
                     cmd_args.extend(["--".into(), prompt]);
                 } else {
                     commands::inject_attachment_args(&mut cmd_args, &attachment_paths);
@@ -1377,31 +1391,35 @@ async fn handle(
                 // Persistent server (#2): ensure the agent's long-lived `serve`
                 // process is up, then turn this turn into a thin `run --attach`
                 // so we reuse the warm server instead of rebooting the full CLI.
-                let studio_workdir = if command == "nio" { None } else { match agent_servers
-                    .ensure_server(&command, &api_key, mode.as_deref() == Some("studio"))
-                    .await
-                {
-                    Ok((port, workdir)) => {
-                        let attach = format!("http://127.0.0.1:{}", port);
-                        // cmd_args[0] is the "run" subcommand; insert --attach
-                        // right after it so it applies to the run invocation.
-                        if cmd_args.first().map(|s| s.as_str()) == Some("run") {
-                            cmd_args.insert(1, "--attach".to_string());
-                            cmd_args.insert(2, attach);
-                        } else {
-                            cmd_args.insert(0, "--attach".to_string());
-                            cmd_args.insert(1, attach);
+                let studio_workdir = if command == "nio" {
+                    None
+                } else {
+                    match agent_servers
+                        .ensure_server(&command, &api_key, mode.as_deref() == Some("studio"))
+                        .await
+                    {
+                        Ok((port, workdir)) => {
+                            let attach = format!("http://127.0.0.1:{}", port);
+                            // cmd_args[0] is the "run" subcommand; insert --attach
+                            // right after it so it applies to the run invocation.
+                            if cmd_args.first().map(|s| s.as_str()) == Some("run") {
+                                cmd_args.insert(1, "--attach".to_string());
+                                cmd_args.insert(2, attach);
+                            } else {
+                                cmd_args.insert(0, "--attach".to_string());
+                                cmd_args.insert(1, attach);
+                            }
+                            workdir
                         }
-                        workdir
-                    }
-                    Err(e) => {
-                        commands::cleanup_attachment_files(&attachment_paths);
-                        let msg = json!({"event": "chat-stream-done",
+                        Err(e) => {
+                            commands::cleanup_attachment_files(&attachment_paths);
+                            let msg = json!({"event": "chat-stream-done",
                           "payload": {"id": &rid, "error": e}});
-                        let _ = event_tx.send(Message::Text(msg.to_string())).await;
-                        return;
+                            let _ = event_tx.send(Message::Text(msg.to_string())).await;
+                            return;
+                        }
                     }
-                }};
+                };
 
                 let mut cmd = tokio::process::Command::new(&exe);
                 cmd.args(&cmd_args)
@@ -1428,8 +1446,11 @@ async fn handle(
                 // its own credential store (~/.local/share/opencode/auth.json)
                 // is empty.
                 if !api_key.trim().is_empty() {
-                    if command == "nio" { cmd.env("NIO_API_KEY", &api_key); }
-                    else { cmd.env("OPENROUTER_API_KEY", &api_key); }
+                    if command == "nio" {
+                        cmd.env("NIO_API_KEY", &api_key);
+                    } else {
+                        cmd.env("OPENROUTER_API_KEY", &api_key);
+                    }
                 }
                 // Run the agent CLI non-interactively and color-free so
                 // captured tool output is clean, deterministic and can never
@@ -1577,9 +1598,16 @@ async fn handle(
                 let wait_result = child.wait().await;
                 // Descendants retaining pipes must not stall completion forever.
                 for mut reader in readers {
-                    if tokio::time::timeout(std::time::Duration::from_secs(2), &mut reader).await.is_err() { reader.abort(); }
+                    if tokio::time::timeout(std::time::Duration::from_secs(2), &mut reader)
+                        .await
+                        .is_err()
+                    {
+                        reader.abort();
+                    }
                 }
-                if let Some(pid) = child_pid { chat_tracker.unregister(pid); }
+                if let Some(pid) = child_pid {
+                    chat_tracker.unregister(pid);
+                }
 
                 // Remove PID from procs (cleanup).
                 procs.lock().await.remove(&rid);
@@ -1657,7 +1685,11 @@ async fn handle(
         }
         "chat_refresh_models" => {
             let agent: String = arg(args, "agent")?;
-            let models = if agent == "nio" { commands::nio_models(String::new()).await? } else { commands::chat_refresh_models(agent)? };
+            let models = if agent == "nio" {
+                commands::nio_models(String::new()).await?
+            } else {
+                commands::chat_refresh_models(agent)?
+            };
             Ok(serde_json::to_value(models).unwrap_or(Value::Null))
         }
         "chat_check_install" => {
@@ -3158,9 +3190,13 @@ async fn proxy_file_manager_request(
 
 #[cfg(unix)]
 fn stop_chat_group(pid: u32) {
-    unsafe { libc::kill(-(pid as i32), libc::SIGTERM); }
+    unsafe {
+        libc::kill(-(pid as i32), libc::SIGTERM);
+    }
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        unsafe { libc::kill(-(pid as i32), libc::SIGKILL); }
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGKILL);
+        }
     });
 }

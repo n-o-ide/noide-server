@@ -1,18 +1,19 @@
-## v0.4.0 — Zero-Install via npx & Monorepo Sync
+## v0.4.1 — Zero-Install via npx & CI Stabilization
 
-Launches **`npx noide-server`** for instant, zero-install startup on any machine with Node.js, alongside updated backend fixes and process lifecycle improvements.
+Fixes CI formatting verification (`cargo fmt --check`), bumps version across all workspace crates and npm package, and stabilizes the automated release pipeline.
 
 ### Highlights
 
-- **`npx noide-server` (Zero-install launch):** You can now launch `noide-server` directly on any host, VPS, or desktop with a single command:
+- **`npx noide-server` (Zero-install launch):** Launch `noide-server` directly on any host, VPS, or desktop with a single command:
   ```bash
   npx noide-server
   ```
   Auto-detects OS & CPU architecture (Linux x86_64/ARM64, macOS Apple Silicon/Intel, Windows x86_64), downloads the verified native binary matching the release SHA-256 checksum, caches it locally, and launches the server.
 - **npm Package Distribution:** Published as [`noide-server`](https://www.npmjs.com/package/noide-server) on npm with a lightweight, zero-dependency native launcher.
+- **Code Formatting & CI Fix:** Fully formatted according to Rust style guidelines (`cargo fmt --check`) across all workspace crates.
 - **Process Group & Agent Lifecycle:** Improved Unix process group termination for background chat agents and companion processes to ensure clean teardown on exit.
 - **WebSocket Protocol & Sync Updates:** Core backend stability updates and crate optimizations synced from the primary monorepo.
-- **Automated Release Pipeline:** GitHub Actions now packages and verifies checksums for all platform binaries (`noide-server`, `port-forward`, `code-vault`, `http-request`, `canvas-lab`, `file-manager`) and publishes to npm automatically.
+- **Automated Release Pipeline:** GitHub Actions packages and verifies checksums for all platform binaries (`noide-server`, `port-forward`, `code-vault`, `http-request`, `canvas-lab`, `file-manager`) and publishes to npm automatically.
 
 ### Install & Run
 
@@ -47,7 +48,7 @@ curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.s
 
 Pin a specific version:
 ```bash
-VERSION=0.4.0 bash install.sh
+VERSION=0.4.1 bash install.sh
 ```
 
 To install all companion binaries:
@@ -85,8 +86,8 @@ This release attaches pre-built native binaries for all components plus the `SHA
 Manual install:
 
 ```bash
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.4.0/noide-server-linux-x86_64
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.4.0/SHA256SUMS
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.4.1/noide-server-linux-x86_64
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.4.1/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/noide-server
 ```
