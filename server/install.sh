@@ -2,7 +2,7 @@
 # NoIDE installer
 #
 # Downloads noide-server, port-forward, code-vault, http-request, canvas-lab,
-# and file-manager binaries for your OS/arch from the latest GitHub release,
+# and/or file-manager binaries for your OS/arch from the latest GitHub release,
 # verifies their SHA-256 checksum, and installs them.
 # Re-running the script upgrades to the newest version.
 #
@@ -33,8 +33,8 @@ INSTALL_SERVER=1
 INSTALL_PORT_FORWARD=0
 INSTALL_CODE_VAULT=0
 INSTALL_HTTP_REQUEST=0
-INSTALL_CANVAS_LAB=0
 INSTALL_FILE_MANAGER=0
+INSTALL_CANVAS_LAB=0
 
 usage() {
   echo "Usage: bash install.sh [--dry-run] [--force] [--port-forward] [--code-vault] [--http-request] [--canvas-lab] [--file-manager] [--all]"

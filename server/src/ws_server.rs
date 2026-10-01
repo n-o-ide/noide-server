@@ -496,6 +496,11 @@ pub async fn start(
     canvas_lab: Arc<CanvasLabState>,
     file_manager: Arc<FileManagerState>,
 ) -> std::io::Result<()> {
+    // Keep chat processes addressable across websocket reconnects. A browser
+    // can lose its socket while a model run continues, then issue Stop on its
+    // replacement connection.
+    let chat_processes = Arc::new(tokio::sync::Mutex::new(HashMap::<String, u32>::new()));
+    let cancelled_chats = Arc::new(tokio::sync::Mutex::new(HashSet::<String>::new()));
     // Reap exited or long-abandoned sessions so shells never leak as
     // orphans on the host (a session with no subscriber is kept alive for
     // REAP_UNATTACHED so reconnects and reattaches keep working).
@@ -530,6 +535,8 @@ pub async fn start(
         let http_request = http_request.clone();
         let canvas_lab = canvas_lab.clone();
         let file_manager = file_manager.clone();
+        let chat_processes = chat_processes.clone();
+        let cancelled_chats = cancelled_chats.clone();
         tokio::spawn(async move {
             if let Err(e) = handle_connection(
                 stream,
@@ -542,6 +549,8 @@ pub async fn start(
                 http_request,
                 canvas_lab,
                 file_manager,
+                chat_processes,
+                cancelled_chats,
             )
             .await
             {
@@ -567,6 +576,8 @@ async fn handle_connection(
     http_request: Arc<HttpRequestState>,
     canvas_lab: Arc<CanvasLabState>,
     file_manager: Arc<FileManagerState>,
+    processes: Arc<tokio::sync::Mutex<HashMap<String, u32>>>,
+    cancelled_chats: Arc<tokio::sync::Mutex<HashSet<String>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Interactive terminal traffic is a stream of small messages; without
     // TCP_NODELAY the Nagle algorithm can hold a small write until earlier
@@ -623,9 +634,6 @@ async fn handle_connection(
     // back to the pty reader and the child process.
     let (out_tx, mut out_rx) = mpsc::channel::<Message>(OUT_CAP);
 
-    // Tracks running chat-stream child PIDs so they can be cancelled.
-    let processes = Arc::new(tokio::sync::Mutex::new(HashMap::<String, u32>::new()));
-
     // Sessions this connection is currently subscribed to (spawned or
     // attached). On close we detach from them — they keep running and their
     // output keeps buffering into the ring so a reconnect can reattach.
@@ -637,7 +645,7 @@ async fn handle_connection(
     // ANY incoming message (incl. protocol pongs) and on every outbound data
     // write, so a live terminal is never dropped — even one that just streams
     // output or sits idle while the user reads.
-    let idle_limit = std::time::Duration::from_secs(60);
+    let idle_limit = std::time::Duration::from_secs(300);
     let last_activity = Arc::new(Mutex::new(Instant::now()));
 
     // Task that drains outgoing messages to the websocket. A periodic Ping
@@ -735,6 +743,7 @@ async fn handle_connection(
                 let pty_t = pty.clone();
                 let out_tx_t = out_tx.clone();
                 let processes_t = processes.clone();
+                let cancelled_chats_t = cancelled_chats.clone();
                 let subscribed_t = subscribed.clone();
                 let stats_t = stats.clone();
                 let chat_tracker_t = chat_tracker.clone();
@@ -750,6 +759,7 @@ async fn handle_connection(
                         &pty_t,
                         out_tx_t.clone(),
                         processes_t,
+                        cancelled_chats_t,
                         subscribed_t,
                         stats_t,
                         chat_tracker_t,
@@ -861,9 +871,7 @@ async fn handle_connection(
         #[cfg(unix)]
         {
             chat_tracker.unregister(pid);
-            unsafe {
-                libc::kill(-(pid as i32), libc::SIGKILL);
-            }
+            stop_chat_group(pid);
         }
         #[cfg(not(unix))]
         {
@@ -914,6 +922,7 @@ async fn handle(
     pty: &Arc<Mutex<PtyManager>>,
     out_tx: mpsc::Sender<Message>,
     processes: Arc<tokio::sync::Mutex<HashMap<String, u32>>>,
+    cancelled_chats: Arc<tokio::sync::Mutex<HashSet<String>>>,
     subscribed: Arc<Mutex<HashSet<String>>>,
     stats: Arc<Mutex<ConnStats>>,
     chat_tracker: Arc<ChatProcessTracker>,
@@ -1252,6 +1261,7 @@ async fn handle(
         }
         "chat_stream" => {
             let command: String = arg(args, "command")?;
+            if !matches!(command.as_str(), "kilo" | "opencode" | "nio") { return Err("Unsupported chat agent".into()); }
             let cmd_args: Vec<String> = opt_arg(args, "args").unwrap_or_default();
             let cwd: Option<String> = opt_arg(args, "cwd");
             let api_key: String = opt_arg(args, "apiKey").unwrap_or_default();
@@ -1262,6 +1272,7 @@ async fn handle(
             let rid: String = opt_arg(args, "requestId").unwrap_or_else(|| req.id.to_string());
             let event_tx = out_tx;
             let procs = processes.clone();
+            let cancellations = cancelled_chats.clone();
             let agent_servers = agent_servers.clone();
             tokio::spawn(async move {
                 use std::process::Stdio;
@@ -1335,7 +1346,8 @@ async fn handle(
                 // Materialize attachment contents to temp files and pass them via
                 // the CLI's native `-f/--file` flag instead of inlining huge
                 // base64 blobs into the (size-limited) prompt argument.
-                let attachment_paths = match commands::write_attachment_files(&attachments) {
+                let attachment_result = if command == "nio" { commands::write_nio_attachment_files(&attachments) } else { commands::write_attachment_files(&attachments) };
+                let attachment_paths = match attachment_result {
                     Ok(p) => p,
                     Err(e) => {
                         let msg = json!({"event": "chat-stream-done", "payload": {"id": &rid, "error": e}});
@@ -1344,13 +1356,32 @@ async fn handle(
                     }
                 };
                 let mut cmd_args = cmd_args;
-                commands::inject_attachment_args(&mut cmd_args, &attachment_paths);
+                if command == "nio" {
+                    if cmd_args.first().map(String::as_str) != Some("run") {
+                        commands::cleanup_attachment_files(&attachment_paths);
+                        let msg = json!({"event":"chat-stream-done","payload":{"id":&rid,"error":"Nio chat requires the run command"}});
+                        let _ = event_tx.send(Message::Text(msg.to_string())).await;
+                        return;
+                    }
+                    let prompt = cmd_args.pop().unwrap_or_default();
+                    for path in &attachment_paths { cmd_args.extend(["--file".into(), path.to_string_lossy().into_owned()]); }
+                    // Highest precedence mode flags are supplied by the backend.
+                    let nio_mode = match mode.as_deref() { Some("build") => "build", Some("plan") => "plan", _ => "ask" };
+                    cmd_args.extend(["--mode".into(), nio_mode.into()]);
+                    if mode.as_deref() == Some("studio") { cmd_args.push("--no-tools".into()); }
+                    cmd_args.extend(["--".into(), prompt]);
+                } else {
+                    commands::inject_attachment_args(&mut cmd_args, &attachment_paths);
+                }
 
                 // Persistent server (#2): ensure the agent's long-lived `serve`
                 // process is up, then turn this turn into a thin `run --attach`
                 // so we reuse the warm server instead of rebooting the full CLI.
-                match agent_servers.ensure_server(&command, &api_key).await {
-                    Ok(port) => {
+                let studio_workdir = if command == "nio" { None } else { match agent_servers
+                    .ensure_server(&command, &api_key, mode.as_deref() == Some("studio"))
+                    .await
+                {
+                    Ok((port, workdir)) => {
                         let attach = format!("http://127.0.0.1:{}", port);
                         // cmd_args[0] is the "run" subcommand; insert --attach
                         // right after it so it applies to the run invocation.
@@ -1361,17 +1392,21 @@ async fn handle(
                             cmd_args.insert(0, "--attach".to_string());
                             cmd_args.insert(1, attach);
                         }
+                        workdir
                     }
                     Err(e) => {
+                        commands::cleanup_attachment_files(&attachment_paths);
                         let msg = json!({"event": "chat-stream-done",
                           "payload": {"id": &rid, "error": e}});
                         let _ = event_tx.send(Message::Text(msg.to_string())).await;
                         return;
                     }
-                }
+                }};
 
                 let mut cmd = tokio::process::Command::new(&exe);
                 cmd.args(&cmd_args)
+                    .stdin(Stdio::null())
+                    .kill_on_drop(true)
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped());
                 // Put the CLI in its own process group so we can kill the
@@ -1383,7 +1418,9 @@ async fn handle(
                 {
                     cmd.process_group(0);
                 }
-                if let Some(dir) = cwd {
+                if let Some(dir) = studio_workdir.as_ref() {
+                    cmd.current_dir(dir);
+                } else if let Some(dir) = cwd {
                     cmd.current_dir(dir);
                 }
                 // Pass the API key as an env var so the CLI (e.g. opencode)
@@ -1391,7 +1428,8 @@ async fn handle(
                 // its own credential store (~/.local/share/opencode/auth.json)
                 // is empty.
                 if !api_key.trim().is_empty() {
-                    cmd.env("OPENROUTER_API_KEY", &api_key);
+                    if command == "nio" { cmd.env("NIO_API_KEY", &api_key); }
+                    else { cmd.env("OPENROUTER_API_KEY", &api_key); }
                 }
                 // Run the agent CLI non-interactively and color-free so
                 // captured tool output is clean, deterministic and can never
@@ -1420,17 +1458,35 @@ async fn handle(
                 if command == "kilo" {
                     if let Some(m) = &mode {
                         if !m.trim().is_empty() {
-                            let kilo_mode = match m.as_str() {
-                                "ask" => "ask",
-                                "plan" => "plan",
-                                _ => "code",
-                            };
-                            cmd.env(
-                                "KILO_CONFIG_CONTENT",
-                                format!("{{\"mode\":\"{}\"}}", kilo_mode),
-                            );
+                            // Studio owns generated-file writes. Its model requests
+                            // may only return text, regardless of user-level Kilo
+                            // auto-approval rules for edit, write, or shell tools.
+                            if m == "studio" {
+                                cmd.env(
+                                    "KILO_CONFIG_CONTENT",
+                                    r#"{"mode":"ask","permission":{"*":"deny"}}"#,
+                                );
+                            } else {
+                                let kilo_mode = match m.as_str() {
+                                    "ask" => "ask",
+                                    "plan" => "plan",
+                                    _ => "code",
+                                };
+                                cmd.env(
+                                    "KILO_CONFIG_CONTENT",
+                                    format!("{{\"mode\":\"{}\"}}", kilo_mode),
+                                );
+                            }
                         }
                     }
+                } else if command == "opencode" && mode.as_deref() == Some("studio") {
+                    // OpenCode's plan agent can still inherit user permission
+                    // overrides. Deny editing and shell execution for Studio
+                    // even when the user's normal coding agent allows them.
+                    cmd.env(
+                        "OPENCODE_CONFIG_CONTENT",
+                        r#"{"permission":{"*":"deny"},"agent":{"plan":{"permission":{"*":"deny"}}}}"#,
+                    );
                 }
 
                 let child = match cmd.spawn() {
@@ -1467,15 +1523,34 @@ async fn handle(
                 // Store the PID (not the Child) so chat_cancel can kill by PID
                 // without needing mutable access to the Child handle.
                 let child_pid = child.id();
-                if let Some(pid) = child_pid {
-                    procs.lock().await.insert(rid.clone(), pid);
+                let cancelled_before_spawn = {
+                    let mut cancelled = cancellations.lock().await;
+                    if cancelled.remove(&rid) {
+                        true
+                    } else {
+                        if let Some(pid) = child_pid {
+                            procs.lock().await.insert(rid.clone(), pid);
+                        }
+                        false
+                    }
+                };
+                if cancelled_before_spawn {
+                    if let Some(pid) = child_pid {
+                        #[cfg(unix)]
+                        stop_chat_group(pid);
+                        #[cfg(not(unix))]
+                        {
+                            let _ = child.start_kill();
+                        }
+                    }
                 }
 
                 // Spawn line readers (no lock held).
+                let mut readers = Vec::new();
                 if let Some(stdout) = stdout {
                     let tx = event_tx.clone();
                     let id = rid.clone();
-                    tokio::spawn(async move {
+                    readers.push(tokio::spawn(async move {
                         let mut lines = BufReader::new(stdout).lines();
                         while let Ok(Some(line)) = lines.next_line().await {
                             let msg = json!({"event": "chat-stream-chunk", "payload": {"id": &id, "stream": "stdout", "text": line}});
@@ -1483,12 +1558,12 @@ async fn handle(
                                 break;
                             }
                         }
-                    });
+                    }));
                 }
                 if let Some(stderr) = stderr {
                     let tx = event_tx.clone();
                     let id = rid.clone();
-                    tokio::spawn(async move {
+                    readers.push(tokio::spawn(async move {
                         let mut lines = BufReader::new(stderr).lines();
                         while let Ok(Some(line)) = lines.next_line().await {
                             let msg = json!({"event": "chat-stream-chunk", "payload": {"id": &id, "stream": "stderr", "text": line}});
@@ -1496,19 +1571,19 @@ async fn handle(
                                 break;
                             }
                         }
-                    });
+                    }));
                 }
 
-                // Unregister from global tracker.
-                if let Some(pid) = child_pid {
-                    chat_tracker.unregister(pid);
-                }
-                // Wait on the local Child handle (not via procs).
-                // chat_cancel kills by PID so it doesn't need to remove from procs.
                 let wait_result = child.wait().await;
+                // Descendants retaining pipes must not stall completion forever.
+                for mut reader in readers {
+                    if tokio::time::timeout(std::time::Duration::from_secs(2), &mut reader).await.is_err() { reader.abort(); }
+                }
+                if let Some(pid) = child_pid { chat_tracker.unregister(pid); }
 
                 // Remove PID from procs (cleanup).
                 procs.lock().await.remove(&rid);
+                cancellations.lock().await.remove(&rid);
 
                 // The CLI has read the attachment files by now — reclaim the
                 // temp space regardless of how the run ended.
@@ -1535,8 +1610,13 @@ async fn handle(
         "chat_cancel" => {
             let cancel_id: String = arg(args, "id")?;
             let pid = {
+                let mut cancelled = cancelled_chats.lock().await;
                 let guard = processes.lock().await;
-                guard.get(&cancel_id).copied()
+                let pid = guard.get(&cancel_id).copied();
+                if pid.is_none() {
+                    cancelled.insert(cancel_id.clone());
+                }
+                pid
             };
             if let Some(pid) = pid {
                 // Kill the entire process group (CLI + grandchildren) not
@@ -1544,9 +1624,7 @@ async fn handle(
                 #[cfg(unix)]
                 {
                     chat_tracker.unregister(pid);
-                    unsafe {
-                        libc::kill(-(pid as i32), libc::SIGKILL);
-                    }
+                    stop_chat_group(pid);
                 }
                 #[cfg(not(unix))]
                 {
@@ -1579,7 +1657,8 @@ async fn handle(
         }
         "chat_refresh_models" => {
             let agent: String = arg(args, "agent")?;
-            Ok(serde_json::to_value(commands::chat_refresh_models(agent)?).unwrap_or(Value::Null))
+            let models = if agent == "nio" { commands::nio_models(String::new()).await? } else { commands::chat_refresh_models(agent)? };
+            Ok(serde_json::to_value(models).unwrap_or(Value::Null))
         }
         "chat_check_install" => {
             let command: String = arg(args, "command")?;
@@ -2287,343 +2366,6 @@ async fn proxy_code_vault_request(
         .map_err(|e| format!("code-vault response read failed: {}", e))?;
     let json: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({ "raw": text }));
     Ok(json)
-}
-
-// ── HTTP Request ──────────────────────────────────────────────────────────
-
-fn is_http_request_on_path() -> bool {
-    let exe = if std::cfg!(windows) {
-        "http-request.exe"
-    } else {
-        "http-request"
-    };
-    if let Some(path_env) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&path_env) {
-            if dir.join(exe).is_file() {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-fn find_http_request_binary() -> Option<std::path::PathBuf> {
-    let exe = if std::cfg!(windows) {
-        "http-request.exe"
-    } else {
-        "http-request"
-    };
-    if let Some(path_env) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&path_env) {
-            let candidate = dir.join(exe);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    if let Some(project_root) = server_dir.parent() {
-        let hr_dir = project_root.join("http-request");
-        for profile in ["target/debug", "target/release"] {
-            let candidate = hr_dir.join(profile).join(exe);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    None
-}
-
-async fn install_http_request_command(force: bool) -> Result<Value, String> {
-    if !force && is_http_request_on_path() {
-        return Ok(json!({ "installed": true, "output": "http-request is already installed." }));
-    }
-    if force {
-        eprintln!("[http-request] force install — building from local source");
-        return install_http_request_local().await;
-    }
-    let remote_result = install_http_request_remote().await;
-    if let Ok(val) = &remote_result {
-        if val
-            .get("installed")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-        {
-            return remote_result;
-        }
-    }
-    let remote_err = remote_result.err().unwrap_or_default();
-    eprintln!(
-        "[http-request] remote install failed: {}. Trying local build…",
-        remote_err
-    );
-    install_http_request_local().await
-}
-
-async fn install_http_request_remote() -> Result<Value, String> {
-    use std::process::Stdio;
-    let install_url = "https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh";
-    let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
-    let curl_output = tokio::process::Command::new("curl")
-        .args([
-            "-fsSL",
-            install_url,
-            "-o",
-            script_path.to_str().unwrap_or(""),
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .output()
-        .await
-        .map_err(|e| format!("Failed to download install.sh: {}", e))?;
-    if !curl_output.status.success() {
-        return Err(format!(
-            "Failed to download install.sh: {}",
-            String::from_utf8_lossy(&curl_output.stderr)
-        ));
-    }
-    let output = tokio::process::Command::new("bash")
-        .args([script_path.to_str().unwrap_or(""), "--http-request"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run install.sh: {}", e))?;
-    let combined = format!(
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    if output.status.success() && find_http_request_binary().is_some() {
-        Ok(json!({ "installed": true, "output": combined }))
-    } else {
-        Err(combined)
-    }
-}
-
-async fn install_http_request_local() -> Result<Value, String> {
-    use std::process::Stdio;
-    let server_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let project_root = server_dir
-        .parent()
-        .ok_or_else(|| "cannot locate project root".to_string())?;
-    let hr_dir = project_root.join("http-request");
-    if !hr_dir.join("Cargo.toml").exists() {
-        return Err(format!(
-            "Local http-request source not found at {}",
-            hr_dir.display()
-        ));
-    }
-    let cargo = std::env::var_os("CARGO")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("cargo"));
-    let output = tokio::process::Command::new(&cargo)
-        .args([
-            "install",
-            "--path",
-            hr_dir.to_str().unwrap_or("http-request"),
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run cargo install: {}", e))?;
-    let combined = format!(
-        "{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    if output.status.success() && find_http_request_binary().is_some() {
-        Ok(json!({ "installed": true, "output": combined }))
-    } else {
-        Err(combined)
-    }
-}
-
-async fn start_http_request_command(state: Arc<HttpRequestState>) -> Result<Value, String> {
-    use std::process::Stdio;
-    {
-        let guard = state.child.lock().await;
-        if guard.is_some() {
-            let port = *state.port.lock().await;
-            return Ok(json!({ "running": true, "port": port }));
-        }
-    }
-    let bin = find_http_request_binary().ok_or_else(|| {
-        "http-request binary not found. Install it from the Apps folder first.".to_string()
-    })?;
-    let mut cmd = tokio::process::Command::new(&bin);
-    cmd.env("HTTP_REQUEST_ADDR", "127.0.0.1:0");
-    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-    cmd.kill_on_drop(true);
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("Failed to start http-request: {}", e))?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "http-request: missing stdout".to_string())?;
-    use tokio::io::{AsyncBufReadExt, BufReader};
-    let mut reader = BufReader::new(stdout).lines();
-    let (port_tx, port_rx) = tokio::sync::oneshot::channel::<u16>();
-    tokio::spawn(async move {
-        while let Ok(Some(line)) = reader.next_line().await {
-            if let Some(p) = line.strip_prefix("HTTP_REQUEST_PORT=") {
-                if let Ok(port) = p.trim().parse::<u16>() {
-                    let _ = port_tx.send(port);
-                    return;
-                }
-            }
-        }
-    });
-    let port = tokio::time::timeout(std::time::Duration::from_secs(5), port_rx)
-        .await
-        .map_err(|_| "http-request did not start in time".to_string())?
-        .map_err(|_| "http-request did not report a port".to_string())?;
-    *state.child.lock().await = Some(child);
-    *state.port.lock().await = Some(port);
-    // Wait for the http-request server to actually accept connections.
-    // The binary prints the port before axum::serve starts, so there is a
-    // brief window where the listener is bound but not yet accepting.
-    let addr = format!("127.0.0.1:{}", port);
-    for _ in 0..50 {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        if tokio::net::TcpStream::connect(&addr).await.is_ok() {
-            return Ok(json!({ "running": true, "port": port }));
-        }
-        // Check if the child exited unexpectedly.
-        let mut guard = state.child.lock().await;
-        if let Some(child) = guard.as_mut() {
-            if let Ok(Some(_status)) = child.try_wait() {
-                drop(guard);
-                state.stop().await;
-                return Err("http-request process exited before becoming ready".to_string());
-            }
-        }
-    }
-    Ok(json!({ "running": true, "port": port }))
-}
-
-async fn stop_http_request_command(state: Arc<HttpRequestState>) -> Result<Value, String> {
-    state.stop().await;
-    Ok(json!({ "stopped": true }))
-}
-
-async fn proxy_http_request_request(
-    method: &str,
-    path: &str,
-    body: Option<String>,
-    state: Arc<HttpRequestState>,
-) -> Result<Value, String> {
-    let port = state.port.lock().await.ok_or_else(|| {
-        "http-request is not running. Start it from the Apps folder first.".to_string()
-    })?;
-    let url = format!("http://127.0.0.1:{}{}", port, path);
-    let client = reqwest::Client::new();
-    let mut req = match method.to_uppercase().as_str() {
-        "POST" => client.post(&url),
-        "PUT" => client.put(&url),
-        "DELETE" => client.delete(&url),
-        _ => client.get(&url),
-    };
-    if let Some(b) = body {
-        req = req.header("content-type", "application/json").body(b);
-    }
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| format!("http-request request failed: {}", e))?;
-    let text = resp
-        .text()
-        .await
-        .map_err(|e| format!("http-request response read failed: {}", e))?;
-    let json: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({ "raw": text }));
-    Ok(json)
-}
-
-async fn start_port_forward_web_command(
-    port_forward: Arc<PortForwardState>,
-) -> Result<Value, String> {
-    use std::process::Stdio;
-
-    let bin = match find_port_forward_binary() {
-        Some(p) => p,
-        None => {
-            return Err(
-                "port-forward binary is not installed. Install it from the Apps folder first."
-                    .into(),
-            );
-        }
-    };
-
-    let addr = "127.0.0.1:7420";
-
-    // If already running, verify the port is actually serving before reusing.
-    {
-        let mut guard = port_forward.forwards.lock().await;
-        if let Some(child) = guard.get_mut("web") {
-            if let Ok(Some(_status)) = child.try_wait() {
-                guard.remove("web");
-            } else {
-                drop(guard);
-                if tokio::net::TcpStream::connect(addr).await.is_ok() {
-                    return Ok(json!({"started": true, "url": format!("http://{}", addr)}));
-                }
-                port_forward.stop("web").await;
-            }
-        }
-    }
-
-    let mut cmd = tokio::process::Command::new(&bin);
-    cmd.args(["--web", addr])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .kill_on_drop(false);
-
-    let child = cmd
-        .spawn()
-        .map_err(|e| format!("Failed to start port-forward web UI: {}", e))?;
-
-    {
-        let mut guard = port_forward.forwards.lock().await;
-        guard.insert("web".to_string(), child);
-    }
-
-    // Wait briefly for the HTTP listener to come up.
-    for _ in 0..50 {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        if tokio::net::TcpStream::connect(addr).await.is_ok() {
-            return Ok(json!({"started": true, "url": format!("http://{}", addr)}));
-        }
-        {
-            let mut guard = port_forward.forwards.lock().await;
-            if let Some(child) = guard.get_mut("web") {
-                if let Ok(Some(status)) = child.try_wait() {
-                    guard.remove("web");
-                    return Err(format!(
-                        "port-forward web UI exited with status {} before listening on {}",
-                        status, addr
-                    ));
-                }
-            }
-        }
-    }
-
-    port_forward.stop("web").await;
-    Err(format!(
-        "port-forward web UI did not start listening on {}",
-        addr
-    ))
-}
-
-async fn stop_port_forward_web_command(
-    port_forward: Arc<PortForwardState>,
-) -> Result<Value, String> {
-    port_forward.stop("web").await;
-    Ok(json!({"stopped": true}))
 }
 
 // ── Canvas Lab ────────────────────────────────────────────────────────────
@@ -3412,4 +3154,13 @@ async fn proxy_file_manager_request(
         .map_err(|e| format!("file-manager response read failed: {}", e))?;
     let json: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({ "raw": text }));
     Ok(json)
+}
+
+#[cfg(unix)]
+fn stop_chat_group(pid: u32) {
+    unsafe { libc::kill(-(pid as i32), libc::SIGTERM); }
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        unsafe { libc::kill(-(pid as i32), libc::SIGKILL); }
+    });
 }

@@ -19,6 +19,8 @@ This repo also includes companion binaries:
 **Contents**
 
 - [Install](#install)
+  - [Quickstart with npx (Zero-install)](#quickstart-with-npx-zero-install)
+  - [Install script (curl)](#recommended-install-script)
 - [Run](#run)
 - [Port Forward](#port-forward)
 - [Code Vault](#code-vault)
@@ -44,21 +46,44 @@ Supported platforms:
 | macOS | x86_64 (Intel), aarch64 (Apple Silicon) | see [macOS note](#macos-note) |
 | Windows | x86_64 | see [Windows note](#windows-note) |
 
+### Quickstart with npx (Zero-install)
+
+If you have Node.js available, run `noide-server` anywhere with a single command without downloading or setting up anything manually:
+
+```bash
+npx noide-server
+```
+
+Pass any flags directly:
+
+```bash
+# Set a persistent secret token
+npx noide-server --token my-secret-token
+
+# Disable automatic Cloudflare tunnel
+npx noide-server --no-cloudflare
+```
+
+To install it globally via npm:
+
+```bash
+npm install -g noide-server
+noide-server
+```
+
+Under the hood, `npx noide-server` detects your operating system and CPU architecture (Linux x64/ARM64, macOS Apple Silicon/Intel, Windows x64), verifies the binary's SHA-256 checksum, caches it in `~/.noide/bin`, and starts the WebSocket server in your current directory.
+
 ### Requirements
 
-- **No Rust needed.** `install.sh` downloads prebuilt binaries. A Rust
-  toolchain is only required to [build from source](#build-from-source).
-- **No Node.js needed** for the core server (files, terminal, git, pairing).
-  Node is only required by the **Chat AI agents** (kilo / opencode): those
-  CLIs are Node-based, so install them on the host yourself (`kilo` /
-  `opencode` must be on your PATH) if you want chat.
+- **No Rust needed.** Prebuilt binaries are downloaded automatically by `npx noide-server` and `install.sh`. A Rust toolchain is only required to [build from source](#build-from-source).
+- **Node.js:** Only required if using `npx noide-server` or the Chat AI agents (kilo / opencode). The standalone binary installed via `install.sh` has zero runtime dependencies.
 - **`git` is required** for the app's Source Control features — the server
   shells out to the `git` binary on the host. Install it if your system
   doesn't already have it.
 - Terminal tabs run your host's login shell — zsh/bash on Linux/macOS and
   PowerShell on Windows.
 
-### Recommended: install script
+### Recommended: install script (curl)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
@@ -188,6 +213,10 @@ if it isn't already on your PATH.
 ## Run
 
 ```bash
+# Via npx (zero installation):
+npx noide-server
+
+# Or if installed to PATH:
 noide-server
 ```
 

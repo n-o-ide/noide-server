@@ -1,0 +1,39 @@
+{
+  "name": "noide-server",
+  "version": "0.3.10",
+  "description": "The self-hosted backend for NoIDE — browser/mobile code editor and terminal",
+  "main": "bin/noide-server.js",
+  "bin": {
+    "noide-server": "./bin/noide-server.js"
+  },
+  "scripts": {
+    "start": "node ./bin/noide-server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/n-o-ide/noide-server.git"
+  },
+  "keywords": [
+    "noide",
+    "terminal",
+    "pty",
+    "editor",
+    "remote-development",
+    "cloudflare-tunnel",
+    "websocket"
+  ],
+  "author": "NoIDE Team",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/n-o-ide/noide-server/issues"
+  },
+  "homepage": "https://github.com/n-o-ide/noide-server#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ]
+}

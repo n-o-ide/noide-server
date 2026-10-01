@@ -11,7 +11,20 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
+
+/// Studio supplies all page context in the prompt. Agent CLIs must not start
+/// inside the app project, where their tools could overwrite web/index.html.
+pub fn studio_agent_workdir() -> Result<PathBuf, String> {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("Failed to create Studio workspace: {}", e))?
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("noide-studio-{}-{}", std::process::id(), nonce));
+    fs::create_dir(&dir).map_err(|e| format!("Failed to create Studio workspace: {}", e))?;
+    Ok(dir)
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1162,9 +1175,24 @@ async fn query_agent_models(models_url: &str, api_key: &str) -> Result<Vec<ChatM
 /// OpenAI-compatible `/v1/models` endpoint directly. The API key is supplied by
 /// the client (the chat panel's API-key field), not read from local config.
 pub async fn chat_models(agent: String, api_key: String) -> Result<Vec<ChatModel>, String> {
+    if agent.trim() == "nio" { return nio_models(api_key).await; }
     let url = agent_models_url(agent.trim()).ok_or_else(|| format!("Unknown agent '{}'", agent))?;
 
     query_agent_models(url, &api_key).await
+}
+
+pub async fn nio_models(api_key: String) -> Result<Vec<ChatModel>, String> {
+    let exe = resolve_agent_bin("nio").ok_or_else(|| cli_missing_message("nio"))?;
+    let mut cmd = tokio::process::Command::new(exe);
+    cmd.args(["models", "--format", "json"]).stdin(std::process::Stdio::null()).kill_on_drop(true);
+    // Catalog keys are selected by Nio's provider configuration. A chat override
+    // must never be broadcast to every configured catalog endpoint.
+    let _ = api_key;
+    let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await
+        .map_err(|_| "Nio model discovery timed out".to_string())?
+        .map_err(|e| format!("Nio model discovery failed: {e}"))?;
+    if !output.status.success() { return Err(String::from_utf8_lossy(&output.stderr).trim().to_string()); }
+    serde_json::from_slice(&output.stdout).map_err(|e| format!("Invalid Nio model catalog: {e}"))
 }
 
 pub fn chat_refresh_models(agent: String) -> Result<Vec<ChatModel>, String> {
@@ -1252,6 +1280,29 @@ impl CliStatus {
 /// with the same name — the failure mode that previously made the chat
 /// stream appear to "fail silently").
 fn looks_like_agent(exe: &std::path::Path, command: &str) -> bool {
+    if command == "nio" {
+        use std::io::Read;
+        let mut child = match std::process::Command::new(exe).arg("--version")
+            .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null()).spawn() {
+            Ok(child) => child, Err(_) => return false,
+        };
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let mut text = String::new();
+                    if !status.success() { return false; }
+                    if let Some(stdout) = child.stdout.take() {
+                        if stdout.take(4096).read_to_string(&mut text).is_err() { return false; }
+                    }
+                    return text.trim().starts_with("nio ") && text.contains("(NioAI)");
+                }
+                Ok(None) if std::time::Instant::now() < deadline => std::thread::sleep(std::time::Duration::from_millis(20)),
+                _ => { let _ = child.kill(); let _ = child.wait(); return false; }
+            }
+        }
+    }
     // Cap the probe so a hung/unresponsive binary can't block the chat
     // pre-flight check. 3s is generous — real CLIs return in <100ms.
     let output = match std::process::Command::new(exe)
@@ -1418,6 +1469,9 @@ pub fn agent_install_package(command: &str) -> Option<&'static str> {
 /// Runs asynchronously (the websocket handler is async) and returns the
 /// combined stdout/stderr so the frontend can show what happened.
 pub async fn install_agent(command: String) -> Result<String, String> {
+    if command == "nio" {
+        return Err("NioAI is a native binary. Install the approved nio release on the server PATH; npm is not required. Automatic native installation will be enabled when release artifacts are published.".into());
+    }
     let pkg = agent_install_package(&command)
         .ok_or_else(|| format!("Don't know how to install agent '{}'", command))?;
 
@@ -1648,9 +1702,16 @@ pub fn chat_stream(
     let mut args = args;
     inject_attachment_args(&mut args, &attachment_paths);
 
+    let studio_workdir = if mode.as_deref() == Some("studio") {
+        Some(studio_agent_workdir()?)
+    } else {
+        None
+    };
     let mut cmd = Command::new(&exe);
     cmd.args(&args);
-    if let Some(dir) = cwd {
+    if let Some(dir) = studio_workdir.as_ref() {
+        cmd.current_dir(dir);
+    } else if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
     // Pass the API key as an env var so the CLI (e.g. opencode) can
@@ -1688,18 +1749,34 @@ pub fn chat_stream(
     // args), so we skip it for non-kilo agents.
     if command == "kilo" {
         if let Some(m) = mode.as_ref() {
-            let kilo_mode = match m.as_str() {
-                "ask" => "ask",
-                "plan" => "plan",
-                _ => "code", // build (and any unknown) -> code
-            };
-            cmd.env(
-                "KILO_CONFIG_CONTENT",
-                format!("{{\"mode\":\"{}\"}}", kilo_mode),
-            );
+            if m == "studio" {
+                cmd.env(
+                    "KILO_CONFIG_CONTENT",
+                    r#"{"mode":"ask","permission":{"*":"deny"}}"#,
+                );
+            } else {
+                let kilo_mode = match m.as_str() {
+                    "ask" => "ask",
+                    "plan" => "plan",
+                    _ => "code", // build (and any unknown) -> code
+                };
+                cmd.env(
+                    "KILO_CONFIG_CONTENT",
+                    format!("{{\"mode\":\"{}\"}}", kilo_mode),
+                );
+            }
         }
+    } else if command == "opencode" && mode.as_deref() == Some("studio") {
+        cmd.env(
+            "OPENCODE_CONFIG_CONTENT",
+            r#"{"permission":{"*":"deny"},"agent":{"plan":{"permission":{"*":"deny"}}}}"#,
+        );
     }
-    let output = match cmd.output() {
+    let output = cmd.output();
+    if let Some(dir) = studio_workdir {
+        let _ = fs::remove_dir_all(dir);
+    }
+    let output = match output {
         Ok(o) => o,
         Err(e) => {
             // resolve_agent_bin already verified the exe exists and cwd was
@@ -1739,4 +1816,28 @@ pub fn get_cwd() -> Result<String, String> {
     std::env::current_dir()
         .map(|p| p.to_string_lossy().to_string())
         .map_err(|e| format!("Failed to get cwd: {}", e))
+}
+
+/// Nio accepts only bounded UTF-8 text attachments. Private, unique temp files
+/// avoid collisions with simultaneous requests and existing symlinks.
+pub fn write_nio_attachment_files(attachments: &[ChatAttachmentInput]) -> Result<Vec<PathBuf>, String> {
+    use std::io::Write;
+    let mut total = 0usize;
+    for att in attachments {
+        if att.base64.is_some() || att.content.is_none() { return Err("NioAI accepts UTF-8 text attachments only".into()); }
+        total = total.saturating_add(att.content.as_ref().map_or(0, String::len));
+        if total > 24 * 1024 || attachments.len() > 16 { return Err("Nio attachments exceed the 24 KiB / 16-file limit".into()); }
+    }
+    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+    let mut paths = Vec::new();
+    for (i, att) in attachments.iter().enumerate() {
+        let path = std::env::temp_dir().join(format!("noide-nio-{}-{nonce}-{i}.txt", std::process::id()));
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
+        let result = options.open(&path).and_then(|mut f| f.write_all(att.content.as_deref().unwrap_or_default().as_bytes()));
+        if let Err(error) = result { let _ = std::fs::remove_file(&path); cleanup_attachment_files(&paths); return Err(error.to_string()); }
+        paths.push(path);
+    }
+    Ok(paths)
 }

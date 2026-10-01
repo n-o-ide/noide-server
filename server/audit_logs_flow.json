@@ -1,0 +1,16 @@
+{
+  "title": "Audit Logs Implementation Flow",
+  "nodes": [
+    { "id": "n1", "label": "No logs now", "type": "start", "x": 100, "y": 60 },
+    { "id": "n2", "label": "First version", "type": "process", "x": 100, "y": 180 },
+    { "id": "n3", "label": "Audit logs?", "type": "decision", "x": 300, "y": 180 },
+    { "id": "n4", "label": "No audit logs", "type": "end", "x": 100, "y": 300 },
+    { "id": "n5", "label": "Has audit logs", "type": "end", "x": 500, "y": 300 }
+  ],
+  "edges": [
+    { "id": "e1", "from": "n1", "to": "n2" },
+    { "id": "e2", "from": "n2", "to": "n3" },
+    { "id": "e3", "from": "n3", "to": "n4", "label": "No" },
+    { "id": "e4", "from": "n3", "to": "n5", "label": "Yes" }
+  ]
+}

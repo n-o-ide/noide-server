@@ -30,6 +30,15 @@ use crate::ws_server::ChatProcessTracker;
 struct ServerHandle {
     port: u16,
     pid: u32,
+    studio_workdir: Option<std::path::PathBuf>,
+}
+
+impl Drop for ServerHandle {
+    fn drop(&mut self) {
+        if let Some(dir) = &self.studio_workdir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
 }
 
 impl ServerHandle {
@@ -68,23 +77,34 @@ impl AgentServerManager {
     /// message of that agent (persistent session). `api_key` seeds the server
     /// environment on first boot only; later calls ignore it (first boot wins,
     /// which matches the serialized single-user chat panel).
-    pub async fn ensure_server(&self, agent: &str, api_key: &str) -> Result<u16, String> {
+    pub async fn ensure_server(
+        &self,
+        agent: &str,
+        api_key: &str,
+        studio: bool,
+    ) -> Result<(u16, Option<std::path::PathBuf>), String> {
+        let key = if studio { format!("{}:studio", agent) } else { agent.to_string() };
         {
             let guard = self.servers.lock().unwrap();
-            if let Some(h) = guard.get(agent) {
+            if let Some(h) = guard.get(&key) {
                 if h.alive() {
-                    return Ok(h.port);
+                    return Ok((h.port, h.studio_workdir.clone()));
                 }
                 // Server died since we started it — drop it and respawn below.
                 eprintln!("[NoIDE] {} server no longer alive; respawning", agent);
             }
         }
-        self.servers.lock().unwrap().remove(agent);
+        self.servers.lock().unwrap().remove(&key);
 
         let exe = crate::commands::resolve_agent_bin(agent)
             .ok_or_else(|| crate::commands::cli_missing_message(agent))?;
 
         let mut cmd = tokio::process::Command::new(&exe);
+        let studio_workdir = if studio {
+            Some(crate::commands::studio_agent_workdir()?)
+        } else {
+            None
+        };
         // --port 0 lets the OS pick a free port; we discover it by parsing the
         // server's "listening on http://127.0.0.1:<port>" banner line.
         cmd.arg("serve")
@@ -93,6 +113,14 @@ impl AgentServerManager {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
+        if let Some(dir) = &studio_workdir {
+            cmd.current_dir(dir);
+            if agent == "kilo" {
+                cmd.env("KILO_CONFIG_CONTENT", r#"{"mode":"ask","permission":{"*":"deny"}}"#);
+            } else if agent == "opencode" {
+                cmd.env("OPENCODE_CONFIG_CONTENT", r#"{"permission":{"*":"deny"},"agent":{"plan":{"permission":{"*":"deny"}}}}"#);
+            }
+        }
         // Own process group so a later kill can tear down the whole server tree.
         #[cfg(unix)]
         {
@@ -124,9 +152,10 @@ impl AgentServerManager {
         cmd.env_remove("FORCE_COLOR");
         cmd.env_remove("CLICOLOR_FORCE");
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| format!("Failed to start {} server: {}", agent, e))?;
+        let mut child = cmd.spawn().map_err(|e| {
+            if let Some(dir) = &studio_workdir { let _ = std::fs::remove_dir_all(dir); }
+            format!("Failed to start {} server: {}", agent, e)
+        })?;
         let pid = child
             .id()
             .ok_or_else(|| format!("{} server spawned without a pid", agent))?;
@@ -166,6 +195,9 @@ impl AgentServerManager {
                 .arg("-9")
                 .arg(pid.to_string())
                 .spawn();
+            if let Some(dir) = &studio_workdir {
+                let _ = std::fs::remove_dir_all(dir);
+            }
             format!("could not determine {} server port from its output", agent)
         })?;
 
@@ -184,8 +216,8 @@ impl AgentServerManager {
         self.servers
             .lock()
             .unwrap()
-            .insert(agent.to_string(), ServerHandle { port, pid });
-        Ok(port)
+            .insert(key, ServerHandle { port, pid, studio_workdir: studio_workdir.clone() });
+        Ok((port, studio_workdir))
     }
 }
 
