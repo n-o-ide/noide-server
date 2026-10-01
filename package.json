@@ -4,14 +4,14 @@
   "description": "The self-hosted backend for NoIDE — browser/mobile code editor and terminal",
   "main": "bin/noide-server.js",
   "bin": {
-    "noide-server": "./bin/noide-server.js"
+    "noide-server": "bin/noide-server.js"
   },
   "scripts": {
     "start": "node ./bin/noide-server.js"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/n-o-ide/noide-server.git"
+    "url": "git+https://github.com/n-o-ide/noide-server.git"
   },
   "keywords": [
     "noide",
