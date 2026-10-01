@@ -14,7 +14,7 @@ Keep the existing web origin to retain browser data.
 
 The self-hosted backend for **NioDE** — a browser/mobile code editor and
 terminal. It is a single native binary that serves PTY terminals, file
-operations, git, and AI coding agents (nio/kilo/opencode) over one WebSocket
+operations, git, and Nio AI coding chat (`nio` CLI) over one WebSocket
 connection.
 
 The NioDE app never runs on the same machine as this server: you point it at a
@@ -66,7 +66,7 @@ Deploy your personal NioDE cloud development server in one click:
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/new?template=https%3A%2F%2Fgithub.com%2Fnio-labs%2Fnio-de)
 
 - **Persistent Volume:** Automatically mounts persistent storage at `/workspace` so code and git repos survive redeploys.
-- **Pre-bundled AI Agents:** Ready out of the box with `nio` (`@nio-labs/nio-ai`), `kilo` (`@kilocode/cli`), and `opencode` (`opencode-ai`).
+- **Nio AI chat:** Ready to use with the `nio` CLI (`@nio-labs/nio-ai`).
 - **Free Automatic SSL:** Connect your NioDE client directly via `wss://<your-project>.up.railway.app/?token=<your-token>`.
 - **Security:** Set `NIO_DE_TOKEN` as your connection password during deployment.
 
@@ -100,7 +100,7 @@ Under the hood, `npx @nio-labs/nio-de` detects your operating system and CPU arc
 ### Requirements
 
 - **No Rust needed.** Prebuilt binaries are downloaded automatically by `npx @nio-labs/nio-de` and `install.sh`. A Rust toolchain is only required to [build from source](#build-from-source).
-- **Node.js:** Only required if using `npx @nio-labs/nio-de` or the Chat AI agents (kilo / opencode). The standalone binary installed via `install.sh` has zero runtime dependencies.
+- **Node.js:** Required for `npx @nio-labs/nio-de` and the Nio chat CLI. The standalone server binary installed via `install.sh` has zero runtime dependencies.
 - **`git` is required** for the app's Source Control features — the server
   shells out to the `git` binary on the host. Install it if your system
   doesn't already have it.
@@ -158,8 +158,8 @@ bash install.sh --all
 ### Recommended: GitHub Codespaces
 
 For the best experience, **run `nio-de` in a GitHub Codespace** — it's
-free within your monthly quota, gives the agents a full Linux environment
-(glibc, Node.js for the kilo/opencode CLIs), and its port forwarding hands you
+free within your monthly quota, gives Nio a full Linux environment
+(glibc and Node.js for the Nio CLI), and its port forwarding hands you
 a `wss://` URL automatically:
 
 1. Create a Codespace (any repo works — even a blank one) and open its terminal.
@@ -182,9 +182,9 @@ Notes:
 ### Termux (Android)
 
 `nio-de` is a native binary and runs on aarch64 devices — Termux works.
-For better performance with the Chat AI agents, run it inside an
+For better performance with Nio chat, run it inside an
 [AndroNix](https://andronix.app) proot (Ubuntu CLI only) instead (a full Linux distro with a
-real glibc + Node.js toolchain); avoid third-party "Proot Distro" installers,
+real glibc + Node.js toolchain for the Nio CLI); avoid third-party "Proot Distro" installers,
 which are slower and less reliable.
 
 ### Manual install
