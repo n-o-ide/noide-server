@@ -18,7 +18,6 @@ fn detect_lan_ip() -> Option<String> {
 
 fn main() {
     let mut addr = std::env::var("NIO_DE_WS_ADDR")
-        .or_else(|_| std::env::var("NOTERM_WS_ADDR"))
         .or_else(|_| std::env::var("PORT").map(|p| format!("0.0.0.0:{p}")))
         .unwrap_or_else(|_| "0.0.0.0:1421".to_string());
 
@@ -44,7 +43,6 @@ fn main() {
                 "    --version, -V      Print version and exit\n",
                 "    --help, -h         Print this help\n\n",
                 "ENVIRONMENT:\n",
-                "    Legacy NOIDE_* and NOTERM_WS_ADDR names are also accepted.\n",
                 "    NIO_DE_WS_ADDR      Bind address and port (default 0.0.0.0:1421)\n",
                 "    PORT                Port to bind to (default 1421, auto-detected on Railway)\n",
                 "    NIO_DE_TOKEN         Fixed token (same as --token)\n",
@@ -63,7 +61,6 @@ fn main() {
     //                              code + QR, printed once at startup, valid
     //                              until this process exits.
     let mut token: Option<String> = std::env::var("NIO_DE_TOKEN")
-        .or_else(|_| std::env::var("NOIDE_TOKEN"))
         .ok()
         .filter(|t| !t.trim().is_empty());
     let mut no_auth = false;
@@ -72,7 +69,6 @@ fn main() {
     let is_cloud_env = std::env::var("RAILWAY_ENVIRONMENT").is_ok()
         || std::env::var("RAILWAY_PROJECT_ID").is_ok()
         || std::env::var("NIO_DE_NO_CLOUDFLARE")
-            .or_else(|_| std::env::var("NOIDE_NO_CLOUDFLARE"))
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
     let mut no_cloudflare = is_cloud_env;

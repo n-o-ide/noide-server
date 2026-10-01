@@ -1,14 +1,13 @@
 # nio-de
 
 
-## NioDE rename compatibility
+## NioDE configuration
 
 Canonical repositories: `nio-labs/nio-de-app` (app) and `nio-labs/nio-de` (server).
-The server command is `nio-de`; `noide-server` remains a compatibility command.
+The server command is `nio-de`.
 New configuration uses `NIO_DE_TOKEN`, `NIO_DE_WS_ADDR`,
 `NIO_DE_NO_CLOUDFLARE`, `NIO_DE_PTY_KEEP_ALIVE`, and `NIO_DE_INSTALL_DIR`.
-Existing `NOIDE_*` variables and `NOTERM_WS_ADDR` remain supported; new names take precedence.
-The npm launcher also accepts `NIO_DE_SERVER_BIN` with `NOIDE_SERVER_BIN` fallback.
+The npm launcher accepts `NIO_DE_SERVER_BIN` to select a native executable.
 Browser storage keys, `.noide` caches, supporting-tool database paths, mobile
 identifier `me.no.ide`, WebSocket messages, and ports are retained.
 Keep the existing web origin to retain browser data.

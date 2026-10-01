@@ -22,7 +22,7 @@
 #   bash install.sh --all                  Install all binaries
 #
 # Environment:
-#   NIO_DE_INSTALL_DIR (also accepts NOIDE_INSTALL_DIR)                Install directory (default ~/.local/bin, or
+#   NIO_DE_INSTALL_DIR                Install directory (default ~/.local/bin, or
 #                                    /usr/local/bin when run as root)
 
 set -eu
@@ -110,9 +110,9 @@ BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
 # --- Install directory ----------------------------------------------------------
 
 if [ "$(id -u)" -eq 0 ]; then
-  INSTALL_DIR="${NIO_DE_INSTALL_DIR:-${NOIDE_INSTALL_DIR:-/usr/local/bin}}"
+  INSTALL_DIR="${NIO_DE_INSTALL_DIR:-/usr/local/bin}"
 else
-  INSTALL_DIR="${NIO_DE_INSTALL_DIR:-${NOIDE_INSTALL_DIR:-${HOME}/.local/bin}}"
+  INSTALL_DIR="${NIO_DE_INSTALL_DIR:-${HOME}/.local/bin}"
 fi
 
 # --- Download + verify + install helper ----------------------------------------
@@ -178,10 +178,6 @@ install_binary() {
 
 if [ "$INSTALL_SERVER" -eq 1 ]; then
   install_binary "nio-de"
-  # Keep the former command usable; install the same verified native binary.
-  if [ "$DRY_RUN" -ne 1 ]; then
-    install -m 0755 "${INSTALL_DIR}/nio-de" "${INSTALL_DIR}/noide-server"
-  fi
 fi
 
 if [ "$INSTALL_PORT_FORWARD" -eq 1 ]; then

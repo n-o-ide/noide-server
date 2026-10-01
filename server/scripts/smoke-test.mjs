@@ -129,14 +129,11 @@ async function main() {
   check('correct token -> open', (await probe(s3.port, '/?token=fixed-tok-1')) === 'open')
   await s3.stop()
 
-  console.log('environment compatibility:')
-  const legacyPort = randPort()
+  console.log('environment configuration:')
   const cases = [
-    ['new token overrides legacy token', [], { NIO_DE_TOKEN: 'new-token', NOIDE_TOKEN: 'old-token' }, 'new-token', 'old-token'],
-    ['legacy token still works', [], { NOIDE_TOKEN: 'old-token' }, 'old-token', 'wrong'],
-    ['CLI token overrides both env names', ['--token', 'cli-token'], { NIO_DE_TOKEN: 'new-token', NOIDE_TOKEN: 'old-token' }, 'cli-token', 'new-token'],
-    ['new bind address overrides legacy', [], { NOTERM_WS_ADDR: 'invalid-address', NIO_DE_TOKEN: 'new-token' }, 'new-token', 'wrong'],
-    ['legacy bind address still works', [], { NIO_DE_WS_ADDR: undefined, NOTERM_WS_ADDR: `127.0.0.1:${legacyPort}`, NOIDE_TOKEN: 'old-token' }, 'old-token', 'wrong', legacyPort],
+    ['NIO_DE_TOKEN accepted', [], { NIO_DE_TOKEN: 'new-token' }, 'new-token', 'wrong'],
+    ['CLI token overrides environment', ['--token', 'cli-token'], { NIO_DE_TOKEN: 'new-token' }, 'cli-token', 'new-token'],
+    ['legacy bind setting ignored', [], { NOTERM_WS_ADDR: 'invalid-address', NIO_DE_TOKEN: 'new-token' }, 'new-token', 'wrong'],
   ]
   for (const [name, args, env, accepted, rejected, fixedPort] of cases) {
     const server = startServer(args, fixedPort || randPort(), env)
@@ -147,6 +144,17 @@ async function main() {
     } finally {
       await server.stop()
     }
+  }
+
+  const legacy = startServer([], randPort(), { NOIDE_TOKEN: 'legacy-secret' })
+  try {
+    await legacy.listening
+    const code = CODE_RE.exec(legacy.stderr())?.[1]
+    check('legacy token setting ignored; pairing generated', !!code)
+    check('legacy token rejected', (await probe(legacy.port, '/?token=legacy-secret')) !== 'open')
+    if (code) check('pairing token accepted', (await probe(legacy.port, `/?token=${code}`)) === 'open')
+  } finally {
+    await legacy.stop()
   }
 
   console.log(failures === 0 ? '\nSMOKE TEST PASSED' : `\nSMOKE TEST FAILED (${failures})`)

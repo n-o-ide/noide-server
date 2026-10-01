@@ -35,7 +35,7 @@ const GZIP_MIN: usize = 128;
 /// shell should survive a long detour (working in another pane, switching
 /// layouts, a long build) and reattach when the terminal comes back. Still
 /// bounded so shells the user genuinely abandoned get reaped. Override with
-/// NOIDE_PTY_KEEP_ALIVE (seconds).
+/// NIO_DE_PTY_KEEP_ALIVE (seconds).
 const REAP_UNATTACHED: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
 /// Tracks every chat-stream child process PID across all connections so
@@ -505,7 +505,6 @@ pub async fn start(
     // orphans on the host (a session with no subscriber is kept alive for
     // REAP_UNATTACHED so reconnects and reattaches keep working).
     let reap_unattached = std::env::var("NIO_DE_PTY_KEEP_ALIVE")
-        .or_else(|_| std::env::var("NOIDE_PTY_KEEP_ALIVE"))
         .ok()
         .and_then(|v| v.trim().parse::<u64>().ok())
         .map(std::time::Duration::from_secs)
@@ -2417,9 +2416,7 @@ fn find_canvas_lab_binary() -> Option<std::path::PathBuf> {
     if let Some(path) = std::env::var_os("PATH") {
         search_dirs.extend(std::env::split_paths(&path));
     }
-    if let Some(dir) =
-        std::env::var_os("NIO_DE_INSTALL_DIR").or_else(|| std::env::var_os("NOIDE_INSTALL_DIR"))
-    {
+    if let Some(dir) = std::env::var_os("NIO_DE_INSTALL_DIR") {
         search_dirs.push(dir.into());
     }
     if let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) {

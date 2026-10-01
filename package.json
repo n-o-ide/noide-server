@@ -1,11 +1,10 @@
 {
   "name": "nio-de",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "The self-hosted backend for NioDE — browser/mobile code editor and terminal",
   "main": "bin/nio-de.js",
   "bin": {
-    "nio-de": "bin/nio-de.js",
-    "noide-server": "bin/noide-server.js"
+    "nio-de": "bin/nio-de.js"
   },
   "scripts": {
     "start": "node ./bin/nio-de.js"
@@ -17,7 +16,6 @@
   "keywords": [
     "niode",
     "nio-de",
-    "noide",
     "terminal",
     "pty",
     "editor",

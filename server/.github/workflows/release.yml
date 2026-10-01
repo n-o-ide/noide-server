@@ -63,7 +63,6 @@ jobs:
           fi
           cp "$BIN" "nio-de-${{ matrix.target }}$EXT"
           chmod +x "nio-de-${{ matrix.target }}$EXT"
-          cp "nio-de-${{ matrix.target }}$EXT" "noide-server-${{ matrix.target }}$EXT"
       # Windows artifacts are not smoke-tested: scripts/smoke-test.mjs
       # exercises the unix pairing/QR flow and the runner is Linux-only here.
       - name: Smoke test the actual artifact
@@ -74,7 +73,6 @@ jobs:
           name: ${{ matrix.target }}
           path: |
             nio-de-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
-            noide-server-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
           if-no-files-found: error
 
   checksums:
@@ -88,7 +86,7 @@ jobs:
           merge-multiple: true
       - name: Generate SHA256SUMS
         working-directory: artifacts
-        run: sha256sum nio-de-* noide-server-* | tee SHA256SUMS
+        run: sha256sum nio-de-* | tee SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: checksums

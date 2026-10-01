@@ -11,9 +11,6 @@ const { spawn, execSync } = require('child_process');
 const pkg = require('../package.json');
 const VERSION = pkg.version;
 const REPO = 'nio-labs/nio-de';
-// Releases before 0.5 used the former artifact name.
-const [major, minor] = VERSION.split('.').map(Number);
-const nativeName = major === 0 && minor < 5 ? 'noide-server' : 'nio-de';
 
 function getPlatformInfo() {
   const platform = os.platform();
@@ -37,7 +34,7 @@ function getPlatformInfo() {
   }
 
   const ext = platform === 'win32' ? '.exe' : '';
-  const assetName = `${nativeName}-${osSuffix}-${archSuffix}${ext}`;
+  const assetName = `nio-de-${osSuffix}-${archSuffix}${ext}`;
   const binName = `nio-de${ext}`;
 
   return { osSuffix, archSuffix, ext, assetName, binName };
@@ -74,13 +71,13 @@ function streamToString(stream) {
 }
 
 async function ensureBinary() {
-  const overrideBin = process.env.NIO_DE_SERVER_BIN || process.env.NOIDE_SERVER_BIN;
+  const overrideBin = process.env.NIO_DE_SERVER_BIN;
   // 1. Check custom override env var
   if (overrideBin) {
     if (fs.existsSync(overrideBin)) {
       return overrideBin;
     }
-    console.warn(`[nio-de] Warning: NIO_DE_SERVER_BIN / NOIDE_SERVER_BIN was set to "${overrideBin}" but file does not exist.`);
+    console.warn(`[nio-de] Warning: NIO_DE_SERVER_BIN was set to "${overrideBin}" but file does not exist.`);
   }
 
   const { assetName, binName, ext } = getPlatformInfo();

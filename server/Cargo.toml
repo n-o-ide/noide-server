@@ -1,7 +1,7 @@
 [package]
 name = "nio-de"
 default-run = "nio-de"
-version = "0.5.0"
+version = "0.5.1"
 description = "Self-hosted WebSocket backend for NioDE (PTY, git, file ops, agent chat)"
 authors = ["you"]
 edition = "2021"
@@ -9,10 +9,6 @@ edition = "2021"
 [[bin]]
 name = "nio-de"
 path = "src/main.rs"
-
-[[bin]]
-name = "noide-server"
-path = "src/legacy.rs"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

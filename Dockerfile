@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY . .
 
 # Build release binary for nio-de
-RUN cargo build --release --locked --bin nio-de --bin noide-server
+RUN cargo build --release --locked --bin nio-de
 
 # ==============================================================================
 # Stage 2: Runtime image
@@ -46,7 +46,6 @@ RUN curl -fsSL https://raw.githubusercontent.com/nio-labs/nio/main/install.sh | 
 
 # Copy compiled nio-de binary
 COPY --from=builder /usr/src/nio-de/target/release/nio-de /usr/local/bin/nio-de
-COPY --from=builder /usr/src/nio-de/target/release/noide-server /usr/local/bin/noide-server
 
 # Set up persistent workspace volume
 RUN mkdir -p /workspace /root/.local/bin /root/.nio/bin
