@@ -1,100 +1,72 @@
-## v0.3.10 — File Manager
+## v0.4.0 — Zero-Install via npx & Monorepo Sync
 
-Adds a new standalone binary: **file-manager** for browsing, uploading,
-downloading, and managing files on the server via a local HTTP server.
+Launches **`npx noide-server`** for instant, zero-install startup on any machine with Node.js, alongside updated backend fixes and process lifecycle improvements.
 
 ### Highlights
 
-- **File Manager.** A new `file-manager` binary for browsing, uploading,
-  downloading, and managing files on the server. Features include directory
-  listing, file read/write, rename, delete, and MIME type detection.
-  Install with `bash install.sh --file-manager` or `bash install.sh --all`.
-- **Code Vault & HTTP Request CI.** The `code-vault` and `http-request`
-  binaries are now fully built, packaged, checksummed, and verified for
-  every supported platform — they were documented in v0.3.5 but never
-  actually shipped.
-- **Improved folder browser.** The Open Folder dialog now defaults to `/` on
-  first launch and handles directory listing errors gracefully (e.g.
-  permission-denied subdirectories no longer break the entire listing).
-- **Go-to-definition fix.** Ctrl+click navigation to definitions in other
-  files now scrolls to the correct line.
-- **Git panel.** Stage/Discard/Diff action buttons are now always visible
-  on each changed file row (no hover required).
-- **Release artifacts.** All five binaries — `noide-server`, `port-forward`,
-  `code-vault`, `http-request`, and `file-manager` — are now built and
-  attached to every release, with a `SHA256SUMS` manifest covering all of them.
-- **Cloudflare Quick Tunnel URL.** Now reported as `wss://` (the tunnel speaks
-  WebSocket over the tunnel), so clients connect correctly.
-- **New commands.** `check_code_vault`, `install_code_vault`,
-  `start_code_vault`, `stop_code_vault`, `code_vault_request`,
-  `check_http_request`, `install_http_request`, `start_http_request`,
-  `stop_http_request`, `http_request_request`.
+- **`npx noide-server` (Zero-install launch):** You can now launch `noide-server` directly on any host, VPS, or desktop with a single command:
+  ```bash
+  npx noide-server
+  ```
+  Auto-detects OS & CPU architecture (Linux x86_64/ARM64, macOS Apple Silicon/Intel, Windows x86_64), downloads the verified native binary matching the release SHA-256 checksum, caches it locally, and launches the server.
+- **npm Package Distribution:** Published as [`noide-server`](https://www.npmjs.com/package/noide-server) on npm with a lightweight, zero-dependency native launcher.
+- **Process Group & Agent Lifecycle:** Improved Unix process group termination for background chat agents and companion processes to ensure clean teardown on exit.
+- **WebSocket Protocol & Sync Updates:** Core backend stability updates and crate optimizations synced from the primary monorepo.
+- **Automated Release Pipeline:** GitHub Actions now packages and verifies checksums for all platform binaries (`noide-server`, `port-forward`, `code-vault`, `http-request`, `canvas-lab`, `file-manager`) and publishes to npm automatically.
 
-### Install
+### Install & Run
+
+#### Option 1: Via npx (Instant / Zero-install)
+
+```bash
+npx noide-server
+```
+
+Pass any flags directly:
+
+```bash
+# Persistent custom token
+npx noide-server --token my-secret-code
+
+# Disable automatic Cloudflare tunnel
+npx noide-server --no-cloudflare
+```
+
+To install globally via npm:
+
+```bash
+npm install -g noide-server
+noide-server
+```
+
+#### Option 2: Via curl install script
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
 ```
 
-Re-running upgrades you to the newest release. Pin a version with
-`VERSION=0.3.10`.
+Pin a specific version:
+```bash
+VERSION=0.4.0 bash install.sh
+```
 
-To install all binaries:
-
+To install all companion binaries:
 ```bash
 bash install.sh --all
 ```
 
 Or install individually:
-
 ```bash
 bash install.sh --port-forward
 bash install.sh --code-vault
 bash install.sh --http-request
+bash install.sh --canvas-lab
 bash install.sh --file-manager
 ```
 
-#### Windows note
-
-SmartScreen may warn about an unsigned binary — click **More info → Run anyway**,
-or verify against the published `SHA256SUMS` before running.
-
-#### macOS note
-
-Downloaded binaries are quarantined by Gatekeeper. If you see
-"cannot be opened because the developer cannot be verified", remove the
-quarantine attribute once:
-
-```bash
-xattr -d com.apple.quarantine "$(command -v noide-server)"
-xattr -d com.apple.quarantine "$(command -v port-forward)"
-xattr -d com.apple.quarantine "$(command -v code-vault)"
-xattr -d com.apple.quarantine "$(command -v http-request)"
-xattr -d com.apple.quarantine "$(command -v file-manager)"
-```
-
-### Run
-
-```bash
-noide-server
-```
-
-On startup you get the usual pairing code + QR **plus** a Cloudflare tunnel URL
-if the download succeeds. Enter the pairing code in the NoIDE app
-(Settings → Server) and connect.
-
-```bash
-noide-server --no-cloudflare
-```
-
-Use `--no-cloudflare` (or set up Caddy/nginx as in the README) when you already
-have a `wss://` path.
-
 ### Assets
 
-This release ships pre-built binaries for all four components — `noide-server`,
-`port-forward`, `code-vault`, and `http-request` — plus a `SHA256SUMS` manifest.
-`install.sh` downloads and verifies the ones you request.
+This release attaches pre-built native binaries for all components plus the `SHA256SUMS` manifest:
 
 | File | Platform |
 |------|----------|
@@ -103,47 +75,18 @@ This release ships pre-built binaries for all four components — `noide-server`
 | `noide-server-darwin-x86_64` | macOS (Intel) |
 | `noide-server-darwin-aarch64` | macOS (Apple Silicon) |
 | `noide-server-windows-x86_64.exe` | Windows (x86_64) |
-| `port-forward-linux-x86_64` | Linux (Intel/AMD) |
-| `port-forward-linux-aarch64` | Linux (ARM64) |
-| `port-forward-darwin-x86_64` | macOS (Intel) |
-| `port-forward-darwin-aarch64` | macOS (Apple Silicon) |
-| `port-forward-windows-x86_64.exe` | Windows (x86_64) |
-| `code-vault-linux-x86_64` | Linux (Intel/AMD) |
-| `code-vault-linux-aarch64` | Linux (ARM64 — Raspberry Pi, ARM servers) |
-| `code-vault-darwin-x86_64` | macOS (Intel) |
-| `code-vault-darwin-aarch64` | macOS (Apple Silicon) |
-| `code-vault-windows-x86_64.exe` | Windows (x86_64) |
-| `http-request-linux-x86_64` | Linux (Intel/AMD) |
-| `http-request-linux-aarch64` | Linux (ARM64 — Raspberry Pi, ARM servers) |
-| `http-request-darwin-x86_64` | macOS (Intel) |
-| `http-request-darwin-aarch64` | macOS (Apple Silicon) |
-| `http-request-windows-x86_64.exe` | Windows (x86_64) |
-| `file-manager-linux-x86_64` | Linux (Intel/AMD) |
-| `file-manager-linux-aarch64` | Linux (ARM64) |
-| `file-manager-darwin-x86_64` | macOS (Intel) |
-| `file-manager-darwin-aarch64` | macOS (Apple Silicon) |
-| `file-manager-windows-x86_64.exe` | Windows (x86_64) |
-| `SHA256SUMS` | Checksums for all binaries |
+| `port-forward-*` | Linux, macOS, Windows |
+| `code-vault-*` | Linux, macOS, Windows |
+| `http-request-*` | Linux, macOS, Windows |
+| `canvas-lab-*` | Linux, macOS, Windows |
+| `file-manager-*` | Linux, macOS, Windows |
+| `SHA256SUMS` | Checksums for all release assets |
 
-Install a downloaded binary manually:
+Manual install:
 
 ```bash
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.10/noide-server-linux-x86_64
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.3.10/SHA256SUMS
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.4.0/noide-server-linux-x86_64
+curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.4.0/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
-chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/
+chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/noide-server
 ```
-
-### Security
-
-- Pairing is **on by default** — the code only exists on the server's console.
-- Use `wss://` whenever the connection leaves your trusted LAN; the token
-  travels in the URL query string, so don't reuse long-lived credentials.
-- `--no-auth` exists for localhost development only.
-- Cloudflare Quick Tunnel is opt-out at startup via `--no-cloudflare`; the
-  tunnel URL is visible only on the server's console (not exposed in the
-  WebSocket protocol itself).
-
-See the [README](https://github.com/n-o-ide/noide-server#readme) and
-[PROTOCOL.md](https://github.com/n-o-ide/noide-server/blob/main/PROTOCOL.md)
-for details.

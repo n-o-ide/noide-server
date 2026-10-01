@@ -296,7 +296,7 @@ dependencies = [
 
 [[package]]
 name = "canvas-lab"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "dirs-next",
@@ -411,7 +411,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "code-vault"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "dirs-next",
@@ -621,7 +621,7 @@ checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
 name = "file-manager"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "chrono",
@@ -855,7 +855,7 @@ checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
 
 [[package]]
 name = "http-request"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "dirs-next",
@@ -1325,7 +1325,7 @@ dependencies = [
 
 [[package]]
 name = "noide-server"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "base64 0.23.1",
  "ctrlc",
@@ -1439,7 +1439,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "port-forward"
-version = "0.1.0"
+version = "0.4.0"
 dependencies = [
  "axum",
  "clap",
