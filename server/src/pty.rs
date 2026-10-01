@@ -178,7 +178,7 @@ impl PtyManager {
 
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
-        cmd.env("TERM_PROGRAM", "NoIDE");
+        cmd.env("TERM_PROGRAM", "NioDE");
         cmd.env("SHELL", &shell_path);
         cmd.env("SHLVL", "1");
 

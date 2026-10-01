@@ -1,13 +1,13 @@
 #!/bin/sh
-# NoIDE installer
+# NioDE installer
 #
-# Downloads noide-server, port-forward, code-vault, http-request, canvas-lab,
+# Downloads nio-de, port-forward, code-vault, http-request, canvas-lab,
 # and/or file-manager binaries for your OS/arch from the latest GitHub release,
 # verifies their SHA-256 checksum, and installs them.
 # Re-running the script upgrades to the newest version.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/nio-labs/nio-de/main/install.sh | bash
 #
 # Options:
 #   VERSION=x.y.z bash install.sh          Install a specific version (default: latest)
@@ -21,12 +21,12 @@
 #   bash install.sh --all                  Install all binaries
 #
 # Environment:
-#   NOIDE_INSTALL_DIR                Install directory (default ~/.local/bin, or
+#   NIO_DE_INSTALL_DIR (also accepts NOIDE_INSTALL_DIR)                Install directory (default ~/.local/bin, or
 #                                    /usr/local/bin when run as root)
 
 set -eu
 
-REPO="nio-labs/noide-server"
+REPO="nio-labs/nio-de"
 DRY_RUN=0
 FORCE=0
 INSTALL_SERVER=1
@@ -65,7 +65,7 @@ case "$OS" in
   Linux) OS_SUFFIX="linux" ;;
   Darwin) OS_SUFFIX="darwin" ;;
   *)
-    echo "error: unsupported OS '$OS'. NoIDE supports Linux and macOS." >&2
+    echo "error: unsupported OS '$OS'. NioDE supports Linux and macOS." >&2
     exit 1
     ;;
 esac
@@ -82,14 +82,14 @@ esac
 SUFFIX="${OS_SUFFIX}-${ARCH_SUFFIX}"
 
 if ! command -v curl >/dev/null 2>&1; then
-  echo "error: curl is required to install NoIDE" >&2
+  echo "error: curl is required to install NioDE" >&2
   exit 1
 fi
 
 # --- Resolve version -----------------------------------------------------------
 
 if [ -z "${VERSION:-}" ]; then
-  echo "Fetching the latest NoIDE release…" >&2
+  echo "Fetching the latest NioDE release…" >&2
   TAG="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" |
     sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
   if [ -z "$TAG" ]; then
@@ -109,9 +109,9 @@ BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
 # --- Install directory ----------------------------------------------------------
 
 if [ "$(id -u)" -eq 0 ]; then
-  INSTALL_DIR="${NOIDE_INSTALL_DIR:-/usr/local/bin}"
+  INSTALL_DIR="${NIO_DE_INSTALL_DIR:-${NOIDE_INSTALL_DIR:-/usr/local/bin}}"
 else
-  INSTALL_DIR="${NOIDE_INSTALL_DIR:-${HOME}/.local/bin}"
+  INSTALL_DIR="${NIO_DE_INSTALL_DIR:-${NOIDE_INSTALL_DIR:-${HOME}/.local/bin}}"
 fi
 
 # --- Download + verify + install helper ----------------------------------------
@@ -176,7 +176,11 @@ install_binary() {
 # --- Install requested binaries ------------------------------------------------
 
 if [ "$INSTALL_SERVER" -eq 1 ]; then
-  install_binary "noide-server"
+  install_binary "nio-de"
+  # Keep the former command usable; install the same verified native binary.
+  if [ "$DRY_RUN" -ne 1 ]; then
+    install -m 0755 "${INSTALL_DIR}/nio-de" "${INSTALL_DIR}/noide-server"
+  fi
 fi
 
 if [ "$INSTALL_PORT_FORWARD" -eq 1 ]; then
@@ -209,8 +213,8 @@ esac
 
 echo >&2
 if [ "$INSTALL_SERVER" -eq 1 ]; then
-  echo "Start noide-server with:  ${INSTALL_DIR}/noide-server" >&2
-  echo "It prints a pairing code + QR — enter it in the NoIDE app." >&2
+  echo "Start nio-de with:  ${INSTALL_DIR}/nio-de" >&2
+  echo "It prints a pairing code + QR — enter it in the NioDE app." >&2
 fi
 if [ "$INSTALL_PORT_FORWARD" -eq 1 ]; then
   echo "Start port-forward with:  ${INSTALL_DIR}/port-forward" >&2
@@ -222,7 +226,7 @@ if [ "$INSTALL_HTTP_REQUEST" -eq 1 ]; then
   echo "Start http-request with:  ${INSTALL_DIR}/http-request" >&2
 fi
 if [ "$INSTALL_CANVAS_LAB" -eq 1 ]; then
-  echo "Canvas Lab is started automatically by NoIDE." >&2
+  echo "Canvas Lab is started automatically by NioDE." >&2
 fi
 if [ "$INSTALL_FILE_MANAGER" -eq 1 ]; then
   echo "Start file-manager with:  ${INSTALL_DIR}/file-manager" >&2

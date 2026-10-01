@@ -17,37 +17,39 @@ fn detect_lan_ip() -> Option<String> {
 }
 
 fn main() {
-    let mut addr = std::env::var("NOTERM_WS_ADDR")
+    let mut addr = std::env::var("NIO_DE_WS_ADDR")
+        .or_else(|_| std::env::var("NOTERM_WS_ADDR"))
         .or_else(|_| std::env::var("PORT").map(|p| format!("0.0.0.0:{p}")))
         .unwrap_or_else(|_| "0.0.0.0:1421".to_string());
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("noide-server {}", env!("CARGO_PKG_VERSION"));
+        println!("nio-de {}", env!("CARGO_PKG_VERSION"));
         return;
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
         print!(
             "{}",
             concat!(
-                "noide-server ",
+                "nio-de ",
                 env!("CARGO_PKG_VERSION"),
-                " — NoIDE WebSocket backend\n\n",
+                " — NioDE WebSocket backend\n\n",
                 "USAGE:\n",
-                "    noide-server [OPTIONS]\n\n",
+                "    nio-de [OPTIONS]\n\n",
                 "OPTIONS:\n",
-                "    --token <value>    Require this fixed token (or NOIDE_TOKEN env)\n",
-                "    --port, -p <port>  Port to bind to (or PORT / NOTERM_WS_ADDR env)\n",
+                "    --token <value>    Require this fixed token (or NIO_DE_TOKEN env)\n",
+                "    --port, -p <port>  Port to bind to (or PORT / NIO_DE_WS_ADDR env)\n",
                 "    --no-auth          Accept unauthenticated connections (dev only)\n",
                 "    --no-cloudflare    Disable automatic Cloudflare tunnel\n",
                 "    --version, -V      Print version and exit\n",
                 "    --help, -h         Print this help\n\n",
                 "ENVIRONMENT:\n",
-                "    NOTERM_WS_ADDR      Bind address and port (default 0.0.0.0:1421)\n",
+                "    Legacy NOIDE_* and NOTERM_WS_ADDR names are also accepted.\n",
+                "    NIO_DE_WS_ADDR      Bind address and port (default 0.0.0.0:1421)\n",
                 "    PORT                Port to bind to (default 1421, auto-detected on Railway)\n",
-                "    NOIDE_TOKEN         Fixed token (same as --token)\n",
-                "    NOIDE_NO_CLOUDFLARE Disable Cloudflare tunnel (auto-disabled on Railway)\n",
-                "    NOIDE_PTY_KEEP_ALIVE  Seconds an unattached terminal session is kept\n",
+                "    NIO_DE_TOKEN         Fixed token (same as --token)\n",
+                "    NIO_DE_NO_CLOUDFLARE Disable Cloudflare tunnel (auto-disabled on Railway)\n",
+                "    NIO_DE_PTY_KEEP_ALIVE  Seconds an unattached terminal session is kept\n",
                 "                          before reaping (default 1800)\n",
             )
         );
@@ -56,11 +58,12 @@ fn main() {
 
     // Authentication modes (highest precedence wins):
     //   1. --no-auth            -> accept unauthenticated connections (dev)
-    //   2. --token <value> / NOIDE_TOKEN -> require that fixed token
+    //   2. --token <value> / NIO_DE_TOKEN -> require that fixed token
     //   3. (default)            -> pairing: generate an ephemeral xxxx-xxxx
     //                              code + QR, printed once at startup, valid
     //                              until this process exits.
-    let mut token: Option<String> = std::env::var("NOIDE_TOKEN")
+    let mut token: Option<String> = std::env::var("NIO_DE_TOKEN")
+        .or_else(|_| std::env::var("NOIDE_TOKEN"))
         .ok()
         .filter(|t| !t.trim().is_empty());
     let mut no_auth = false;
@@ -68,7 +71,8 @@ fn main() {
     // Detect cloud platforms (Railway, Render, etc.) or explicit env var
     let is_cloud_env = std::env::var("RAILWAY_ENVIRONMENT").is_ok()
         || std::env::var("RAILWAY_PROJECT_ID").is_ok()
-        || std::env::var("NOIDE_NO_CLOUDFLARE")
+        || std::env::var("NIO_DE_NO_CLOUDFLARE")
+            .or_else(|_| std::env::var("NOIDE_NO_CLOUDFLARE"))
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
     let mut no_cloudflare = is_cloud_env;
@@ -112,11 +116,11 @@ fn main() {
 
     if no_auth {
         if token.is_some() {
-            eprintln!("[NoIDE] WARNING: --no-auth overrides the configured token.");
+            eprintln!("[NioDE] WARNING: --no-auth overrides the configured token.");
         }
         token = None;
         eprintln!(
-            "[NoIDE] WARNING: --no-auth — the server is accepting UNAUTHENTICATED WebSocket connections.\n    Anyone who can reach this port can read/write files and run shells.\n    Remove --no-auth to require pairing (default)."
+            "[NioDE] WARNING: --no-auth — the server is accepting UNAUTHENTICATED WebSocket connections.\n    Anyone who can reach this port can read/write files and run shells.\n    Remove --no-auth to require pairing (default)."
         );
         // No pairing code exists in this mode, so instead of the code QR,
         // print a QR of the LAN server URL for convenience (scan it with a
@@ -130,7 +134,7 @@ fn main() {
             let url = format!("ws://{}:{}", ip, port);
             eprintln!();
             eprintln!("=====================================================");
-            eprintln!("  NoIDE server (no auth)");
+            eprintln!("  NioDE server (no auth)");
             eprintln!();
             eprintln!("  Server URL for the app:");
             eprintln!();
@@ -144,12 +148,12 @@ fn main() {
             eprintln!();
         } else {
             eprintln!(
-                "[NoIDE] Could not detect a LAN IP — connect to ws://<this-host>:{} manually.",
+                "[NioDE] Could not detect a LAN IP — connect to ws://<this-host>:{} manually.",
                 port
             );
         }
     } else if token.is_some() {
-        eprintln!("[NoIDE] token auth enabled (fixed token from --token / NOIDE_TOKEN).");
+        eprintln!("[NioDE] token auth enabled (fixed token from --token / NIO_DE_TOKEN).");
     } else {
         let code = pairing::generate_code();
         pairing::print_pairing(&code);
@@ -200,7 +204,7 @@ fn main() {
             match shutdown_mgr.lock() {
                 Ok(mut m) => m.kill_all(),
                 Err(poisoned) => {
-                    eprintln!("[NoIDE] mutex poisoned during shutdown — cleaning up anyway");
+                    eprintln!("[NioDE] mutex poisoned during shutdown — cleaning up anyway");
                     poisoned.into_inner().kill_all();
                 }
             }
@@ -234,7 +238,7 @@ fn main() {
                         eprintln!();
                         eprintln!("  {}", url);
                         eprintln!();
-                        eprintln!("  Open this URL in any browser to use NoIDE remotely.");
+                        eprintln!("  Open this URL in any browser to use NioDE remotely.");
                         eprintln!("  The tunnel stays alive as long as this server runs.");
                         eprintln!("=====================================================");
                         eprintln!();
@@ -242,8 +246,8 @@ fn main() {
                         let _ = child.wait().await;
                     }
                     Err(e) => {
-                        eprintln!("[NoIDE] Cloudflare tunnel unavailable: {e}");
-                        eprintln!("[NoIDE] The server is still reachable on the local network.");
+                        eprintln!("[NioDE] Cloudflare tunnel unavailable: {e}");
+                        eprintln!("[NioDE] The server is still reachable on the local network.");
                     }
                 }
             });
@@ -276,7 +280,7 @@ fn main() {
         tokio::select! {
             res = server_fut => {
                 if let Err(e) = res {
-                    eprintln!("[NoIDE] server error: {}", e);
+                    eprintln!("[NioDE] server error: {}", e);
                 }
             }
             _ = shutdown_fut => {

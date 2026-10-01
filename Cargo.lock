@@ -1300,6 +1300,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
+name = "nio-de"
+version = "0.5.0"
+dependencies = [
+ "base64 0.23.1",
+ "ctrlc",
+ "flate2",
+ "futures-util",
+ "libc",
+ "portable-pty",
+ "qrcode",
+ "rand 0.8.8",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+ "windows-sys 0.61.2",
+ "zip",
+]
+
+[[package]]
 name = "nix"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1321,28 +1343,6 @@ dependencies = [
  "cfg-if",
  "cfg_aliases 0.2.2",
  "libc",
-]
-
-[[package]]
-name = "noide-server"
-version = "0.4.2"
-dependencies = [
- "base64 0.23.1",
- "ctrlc",
- "flate2",
- "futures-util",
- "libc",
- "portable-pty",
- "qrcode",
- "rand 0.8.8",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
- "windows-sys 0.61.2",
- "zip",
 ]
 
 [[package]]

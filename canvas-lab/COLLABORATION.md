@@ -8,7 +8,7 @@ This document describes the plan to add real-time multi-user collaboration to Ca
 
 - Canvas Lab is a single-user editor.
 - The Rust backend (`canvas-lab/`) exposes a simple HTTP API: `GET /document`, `PUT /document`.
-- The frontend holds document state in local Vue refs and syncs debounced writes via `noide-server`'s WebSocket proxy.
+- The frontend holds document state in local Vue refs and syncs debounced writes via `nio-de`'s WebSocket proxy.
 - There is no concurrency control, no shared state, and no presence/cursor support.
 
 ---
@@ -33,7 +33,7 @@ This document describes the plan to add real-time multi-user collaboration to Ca
 
 This project already supports outbound tunneling:
 
-- `noide-server` auto-starts a **Cloudflare Quick Tunnel** (`trycloudflare.com`) on startup unless `--no-cloudflare` is passed.
+- `nio-de` auto-starts a **Cloudflare Quick Tunnel** (`trycloudflare.com`) on startup unless `--no-cloudflare` is passed.
 - A standalone `port-forward/` binary supports `trycloudflare`, `localhost.run`, and `localtunnel`.
 - `cloudflared` is downloaded automatically on first run.
 
@@ -43,7 +43,7 @@ Use **two separate tunnels** so Canvas Lab collab is isolated from full IDE acce
 
 | Link | Purpose | Exposes |
 |---|---|---|
-| **Tunnel A** (existing) | Full IDE | `noide-server` on port 1421 |
+| **Tunnel A** (existing) | Full IDE | `nio-de` on port 1421 |
 | **Tunnel B** (new) | Canvas Lab collab only | Dedicated Yjs room server |
 
 **Why two tunnels:**
@@ -54,14 +54,14 @@ Use **two separate tunnels** so Canvas Lab collab is isolated from full IDE acce
 ### 3.3 Add a Yjs document server
 
 - Option A (recommended for speed): run `y-websocket` as a sidecar process.
-- Option B (future): embed a minimal Yjs-aware sync handler in `noide-server` via a new WebSocket sub-protocol.
+- Option B (future): embed a minimal Yjs-aware sync handler in `nio-de` via a new WebSocket sub-protocol.
 
 For now, add `y-websocket` as a dev/run dependency managed by the project scripts.
 
 ### 3.4 Second Cloudflare tunnel for collab
 
 1. Spawn a lightweight collab server (e.g., `y-websocket` or a minimal Axum WebSocket server) on a dedicated port.
-2. From `noide-server` startup, start a second `cloudflared` tunnel pointing at that port.
+2. From `nio-de` startup, start a second `cloudflared` tunnel pointing at that port.
 3. Capture the public URL and surface it as the **Canvas Lab invite link**.
 4. The collaborator connects **only** to Tunnel B for canvas sync; they never touch the IDE.
 
@@ -83,7 +83,7 @@ Extend `PROTOCOL.md` with a new message family, for example:
 { "type": "canvas_lab_collab", "action": "awareness", "data": "<JSON>" }
 ```
 
-`noide-server` proxies these to the Yjs room server.
+`nio-de` proxies these to the Yjs room server.
 
 ---
 

@@ -71,7 +71,7 @@ fn ensure_cloudflared(dest: &std::path::Path) -> Result<std::path::PathBuf, Stri
         "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-{triple}"
     );
 
-    eprintln!("[NoIDE] Downloading cloudflared ({triple})…");
+    eprintln!("[NioDE] Downloading cloudflared ({triple})…");
 
     // Blocking download — fine at startup before the async loop.
     let client = reqwest::blocking::Client::builder()
@@ -118,7 +118,7 @@ fn ensure_cloudflared(dest: &std::path::Path) -> Result<std::path::PathBuf, Stri
             .map_err(|e| format!("failed to chmod cloudflared: {e}"))?;
     }
 
-    eprintln!("[NoIDE] cloudflared installed to {}", dest.display());
+    eprintln!("[NioDE] cloudflared installed to {}", dest.display());
     Ok(dest.to_path_buf())
 }
 
@@ -133,7 +133,7 @@ fn ensure_cloudflared(dest: &std::path::Path) -> Result<std::path::PathBuf, Stri
 pub async fn start_tunnel(port: u16) -> Result<(String, Child), String> {
     let bin = ensure_cloudflared(&cloudflared_path())?;
 
-    eprintln!("[NoIDE] Starting Cloudflare tunnel to port {port}…");
+    eprintln!("[NioDE] Starting Cloudflare tunnel to port {port}…");
 
     let mut child = Command::new(&bin)
         .args(["tunnel", "--url", &format!("http://127.0.0.1:{port}")])

@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -45,6 +48,9 @@ jobs:
             target: windows-x86_64
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build
@@ -55,6 +61,6 @@ jobs:
           else
             cargo build --locked
           fi
-      - name: Smoke test noide-server (handshake + pairing auth)
+      - name: Smoke test nio-de (handshake + pairing auth)
         if: runner.os == 'Linux'
-        run: node scripts/smoke-test.mjs target/debug/noide-server
+        run: node scripts/smoke-test.mjs target/debug/nio-de

@@ -38,6 +38,9 @@ jobs:
             target: windows-x86_64
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build (release)
@@ -51,24 +54,27 @@ jobs:
       - name: Package binary
         run: |
           EXT=""
-          BIN="target/release/noide-server"
+          BIN="target/release/nio-de"
           if [ "${{ matrix.target }}" = "darwin-x86_64" ]; then
-            BIN="target/x86_64-apple-darwin/release/noide-server"
+            BIN="target/x86_64-apple-darwin/release/nio-de"
           elif [ "${{ matrix.target }}" = "windows-x86_64" ]; then
-            BIN="target/release/noide-server.exe"
+            BIN="target/release/nio-de.exe"
             EXT=".exe"
           fi
-          cp "$BIN" "noide-server-${{ matrix.target }}$EXT"
-          chmod +x "noide-server-${{ matrix.target }}$EXT"
+          cp "$BIN" "nio-de-${{ matrix.target }}$EXT"
+          chmod +x "nio-de-${{ matrix.target }}$EXT"
+          cp "nio-de-${{ matrix.target }}$EXT" "noide-server-${{ matrix.target }}$EXT"
       # Windows artifacts are not smoke-tested: scripts/smoke-test.mjs
       # exercises the unix pairing/QR flow and the runner is Linux-only here.
       - name: Smoke test the actual artifact
         if: runner.os == 'Linux'
-        run: node scripts/smoke-test.mjs "./noide-server-${{ matrix.target }}"
+        run: node scripts/smoke-test.mjs "./nio-de-${{ matrix.target }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
-          path: noide-server-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
+          path: |
+            nio-de-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
+            noide-server-${{ matrix.target }}${{ matrix.target == 'windows-x86_64' && '.exe' || '' }}
           if-no-files-found: error
 
   checksums:
@@ -82,7 +88,7 @@ jobs:
           merge-multiple: true
       - name: Generate SHA256SUMS
         working-directory: artifacts
-        run: sha256sum noide-server-* | tee SHA256SUMS
+        run: sha256sum nio-de-* noide-server-* | tee SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: checksums
@@ -105,9 +111,9 @@ jobs:
         run: |
           test -f SHA256SUMS
           for t in linux-x86_64 linux-aarch64 darwin-x86_64 darwin-aarch64; do
-            test -f "noide-server-$t" || { echo "missing noide-server-$t" >&2; exit 1; }
+            test -f "nio-de-$t" || { echo "missing nio-de-$t" >&2; exit 1; }
           done
-          test -f "noide-server-windows-x86_64.exe" || { echo "missing noide-server-windows-x86_64.exe" >&2; exit 1; }
+          test -f "nio-de-windows-x86_64.exe" || { echo "missing nio-de-windows-x86_64.exe" >&2; exit 1; }
       # Curated notes come from RELEASE_BODY.md at the tag's commit (edit that
       # file before tagging); the automatically generated "What's Changed"
       # section is appended below it.
