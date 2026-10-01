@@ -23,7 +23,7 @@ nio-de
 
 The server prints a pairing code for the NioDE app. A fixed token can be supplied
 with `--token` or `NIO_DE_TOKEN`. The native release is published before its npm
-package; after npm publication, use `npx nio-de` or `npm install -g nio-de`.
+package; after npm publication, use `npx @nio-labs/nio-de` or `npm install -g @nio-labs/nio-de`.
 
 ### Native artifacts
 

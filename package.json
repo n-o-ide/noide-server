@@ -1,5 +1,5 @@
 {
-  "name": "nio-de",
+  "name": "@nio-labs/nio-de",
   "version": "0.5.1",
   "description": "The self-hosted backend for NioDE — browser/mobile code editor and terminal",
   "main": "bin/nio-de.js",
@@ -31,6 +31,9 @@
   "homepage": "https://github.com/nio-labs/nio-de#readme",
   "engines": {
     "node": ">=16.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "bin",

@@ -75,32 +75,32 @@ Deploy your personal NioDE cloud development server in one click:
 If you have Node.js available, run `nio-de` anywhere with a single command without downloading or setting up anything manually:
 
 ```bash
-npx nio-de
+npx @nio-labs/nio-de
 ```
 
 Pass any flags directly:
 
 ```bash
 # Set a persistent secret token
-npx nio-de --token my-secret-token
+npx @nio-labs/nio-de --token my-secret-token
 
 # Disable automatic Cloudflare tunnel
-npx nio-de --no-cloudflare
+npx @nio-labs/nio-de --no-cloudflare
 ```
 
 To install it globally via npm:
 
 ```bash
-npm install -g nio-de
+npm install -g @nio-labs/nio-de
 nio-de
 ```
 
-Under the hood, `npx nio-de` detects your operating system and CPU architecture (Linux x64/ARM64, macOS Apple Silicon/Intel, Windows x64), verifies the binary's SHA-256 checksum, caches it in `~/.noide/bin`, and starts the WebSocket server in your current directory.
+Under the hood, `npx @nio-labs/nio-de` detects your operating system and CPU architecture (Linux x64/ARM64, macOS Apple Silicon/Intel, Windows x64), verifies the binary's SHA-256 checksum, caches it in `~/.noide/bin`, and starts the WebSocket server in your current directory.
 
 ### Requirements
 
-- **No Rust needed.** Prebuilt binaries are downloaded automatically by `npx nio-de` and `install.sh`. A Rust toolchain is only required to [build from source](#build-from-source).
-- **Node.js:** Only required if using `npx nio-de` or the Chat AI agents (kilo / opencode). The standalone binary installed via `install.sh` has zero runtime dependencies.
+- **No Rust needed.** Prebuilt binaries are downloaded automatically by `npx @nio-labs/nio-de` and `install.sh`. A Rust toolchain is only required to [build from source](#build-from-source).
+- **Node.js:** Only required if using `npx @nio-labs/nio-de` or the Chat AI agents (kilo / opencode). The standalone binary installed via `install.sh` has zero runtime dependencies.
 - **`git` is required** for the app's Source Control features — the server
   shells out to the `git` binary on the host. Install it if your system
   doesn't already have it.
@@ -238,7 +238,7 @@ if it isn't already on your PATH.
 
 ```bash
 # Via npx (zero installation):
-npx nio-de
+npx @nio-labs/nio-de
 
 # Or if installed to PATH:
 nio-de
