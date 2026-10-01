@@ -43,7 +43,7 @@ noide-server
 #### Option 2: Via curl install script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh | bash
 ```
 
 Pin a specific version:
@@ -86,8 +86,8 @@ This release attaches pre-built native binaries for all components plus the `SHA
 Manual install:
 
 ```bash
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.4.1/noide-server-linux-x86_64
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.4.1/SHA256SUMS
+curl -fLO https://github.com/nio-labs/noide-server/releases/download/v0.4.1/noide-server-linux-x86_64
+curl -fLO https://github.com/nio-labs/noide-server/releases/download/v0.4.1/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/noide-server
 ```

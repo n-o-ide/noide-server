@@ -49,7 +49,7 @@ Supported platforms:
 ### Recommended: install script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh | bash
 ```
 
 What it does: detects your OS/arch, downloads the matching binary from the
@@ -60,7 +60,7 @@ upgrades you to the newest version.
 Prefer inspecting scripts before piping them into a shell? That's reasonable:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh -o install.sh
 less install.sh   # read it
 bash install.sh
 ```
@@ -85,7 +85,7 @@ a `wss://` URL automatically:
 1. Create a Codespace (any repo works — even a blank one) and open its terminal.
 2. Install and start the server:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh | bash
    noide-server
    ```
 3. Codespaces will suggest forwarding port **1421**. Open the forwarded port
@@ -110,12 +110,12 @@ which are slower and less reliable.
 ### Manual install
 
 Download `noide-server-<os>-<arch>` (`noide-server-windows-x86_64.exe` on
-Windows) from the [releases](https://github.com/n-o-ide/noide-server/releases)
+Windows) from the [releases](https://github.com/nio-labs/noide-server/releases)
 page and verify it against the published `SHA256SUMS`:
 
 ```bash
-curl -fLO https://github.com/n-o-ide/noide-server/releases/latest/download/noide-server-linux-x86_64
-curl -fLO https://github.com/n-o-ide/noide-server/releases/latest/download/SHA256SUMS
+curl -fLO https://github.com/nio-labs/noide-server/releases/latest/download/noide-server-linux-x86_64
+curl -fLO https://github.com/nio-labs/noide-server/releases/latest/download/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing   # or: shasum -a 256 -c
 chmod +x noide-server-linux-x86_64
 sudo mv noide-server-linux-x86_64 /usr/local/bin/noide-server
@@ -138,8 +138,8 @@ click **More info → Run anyway**, or launch it from PowerShell and verify it
 against the published `SHA256SUMS`:
 
 ```powershell
-curl.exe -fLO https://github.com/n-o-ide/noide-server/releases/latest/download/noide-server-windows-x86_64.exe
-curl.exe -fLO https://github.com/n-o-ide/noide-server/releases/latest/download/SHA256SUMS
+curl.exe -fLO https://github.com/nio-labs/noide-server/releases/latest/download/noide-server-windows-x86_64.exe
+curl.exe -fLO https://github.com/nio-labs/noide-server/releases/latest/download/SHA256SUMS
 certutil -hashfile noide-server-windows-x86_64.exe SHA256   # compare with SHA256SUMS
 .\noide-server-windows-x86_64.exe --version
 ```
@@ -308,7 +308,7 @@ Then connect the app to `wss://your-url` and pair as usual.
 
 ```bash
 # Latest
-curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh | bash
 
 # Specific version
 VERSION=0.2.0 bash install.sh
@@ -323,7 +323,7 @@ update too (see below).
 ## Build from source
 
 ```bash
-git clone https://github.com/n-o-ide/noide-server
+git clone https://github.com/nio-labs/noide-server
 cd noide-server
 cargo build --release
 ./target/release/noide-server

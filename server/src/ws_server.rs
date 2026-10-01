@@ -2012,7 +2012,7 @@ fn is_port_forward_on_path() -> bool {
 /// Strategy:
 ///   1. If already on PATH and not forced, return immediately.
 ///   2. If forced, skip the PATH check and build from local source.
-///   3. Otherwise, download install.sh from n-o-ide/noide-server and run `bash install.sh --port-forward`.
+///   3. Otherwise, download install.sh from nio-labs/noide-server and run `bash install.sh --port-forward`.
 ///   4. If remote install fails, fall back to `cargo install --path ../port-forward`
 ///      (local dev build from the workspace source).
 async fn install_port_forward_command(force: bool) -> Result<Value, String> {
@@ -2049,7 +2049,7 @@ async fn install_port_forward_command(force: bool) -> Result<Value, String> {
 async fn install_port_forward_remote() -> Result<Value, String> {
     use std::process::Stdio;
 
-    let install_url = "https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh";
+    let install_url = "https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh";
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
 
     let curl_output = tokio::process::Command::new("curl")
@@ -2241,7 +2241,7 @@ async fn install_code_vault_command(force: bool) -> Result<Value, String> {
 
 async fn install_code_vault_remote() -> Result<Value, String> {
     use std::process::Stdio;
-    let install_url = "https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh";
+    let install_url = "https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh";
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
     let curl_output = tokio::process::Command::new("curl")
         .args([
@@ -2459,7 +2459,7 @@ async fn install_canvas_lab_command(force: bool) -> Result<Value, String> {
         let download = tokio::process::Command::new("curl")
             .args([
                 "-fsSL",
-                "https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh",
+                "https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh",
                 "-o",
                 script_path.to_str().unwrap_or(""),
             ])
@@ -2686,7 +2686,7 @@ async fn install_http_request_command(force: bool) -> Result<Value, String> {
 
 async fn install_http_request_remote() -> Result<Value, String> {
     use std::process::Stdio;
-    let install_url = "https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh";
+    let install_url = "https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh";
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
     let curl_output = tokio::process::Command::new("curl")
         .args([
@@ -3025,7 +3025,7 @@ async fn install_file_manager_command(force: bool) -> Result<Value, String> {
 
 async fn install_file_manager_remote() -> Result<Value, String> {
     use std::process::Stdio;
-    let install_url = "https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh";
+    let install_url = "https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh";
     let script_path = std::env::temp_dir().join(format!("noide-install-{}.sh", std::process::id()));
     let curl_output = tokio::process::Command::new("curl")
         .args([

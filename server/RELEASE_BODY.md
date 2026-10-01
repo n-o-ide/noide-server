@@ -25,7 +25,7 @@ code lives, and edit it from every other screen you own.
 ### Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh | bash
 ```
 
 Verifies the SHA-256 checksum, installs to `~/.local/bin`, and doubles as the
@@ -40,7 +40,7 @@ noide-server
 
 Enter the printed pairing code in the NoIDE app (Settings → Server) and
 you're connected. Full walkthroughs (systemd, Codespaces, Termux/AndroNix,
-wss via Caddy/nginx) are in the [README](https://github.com/n-o-ide/noide-server#readme).
+wss via Caddy/nginx) are in the [README](https://github.com/nio-labs/noide-server#readme).
 
 ### Assets
 
@@ -55,8 +55,8 @@ wss via Caddy/nginx) are in the [README](https://github.com/n-o-ide/noide-server
 Install a downloaded binary manually:
 
 ```bash
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.1.0/noide-server-linux-x86_64
-curl -fLO https://github.com/n-o-ide/noide-server/releases/download/v0.1.0/SHA256SUMS
+curl -fLO https://github.com/nio-labs/noide-server/releases/download/v0.1.0/noide-server-linux-x86_64
+curl -fLO https://github.com/nio-labs/noide-server/releases/download/v0.1.0/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/local/bin/
 ```
@@ -68,6 +68,6 @@ chmod +x noide-server-linux-x86_64 && sudo mv noide-server-linux-x86_64 /usr/loc
   travels in the URL query string, so don't reuse long-lived credentials.
 - `--no-auth` exists for localhost development only.
 
-See the [README](https://github.com/n-o-ide/noide-server#readme) and
-[PROTOCOL.md](https://github.com/n-o-ide/noide-server/blob/main/PROTOCOL.md)
+See the [README](https://github.com/nio-labs/noide-server#readme) and
+[PROTOCOL.md](https://github.com/nio-labs/noide-server/blob/main/PROTOCOL.md)
 for details.

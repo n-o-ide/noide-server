@@ -7,7 +7,7 @@
 # Re-running the script upgrades to the newest version.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/n-o-ide/noide-server/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/nio-labs/noide-server/main/install.sh | bash
 #
 # Options:
 #   VERSION=x.y.z bash install.sh          Install a specific version (default: latest)
@@ -26,7 +26,7 @@
 
 set -eu
 
-REPO="n-o-ide/noide-server"
+REPO="nio-labs/noide-server"
 DRY_RUN=0
 FORCE=0
 INSTALL_SERVER=1
