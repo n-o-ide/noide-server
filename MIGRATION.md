@@ -7,7 +7,7 @@ Local folders: nio-de-app and nio-de. Both branches: rename-niode.
 Backend/native/npm version: 0.5.0; supporting tools retain their versions.
 NioAI (`nio` / `nio-ai`) and OpenGuru remain unchanged.
 
-Shared backend/tool source is owned by nio-de-app; sync with:
+Shared backend/tool source is owned by nio-de-app; run from its root:
 
 ```sh
 node scripts/sync-server.mjs --all --dry-run
@@ -52,15 +52,18 @@ comparisons now use the correct source/destination paths.
 Before releasing 0.5.0, require the five-platform CI matrix to pass, verify GitHub
 redirects/raw installer URLs and deployment connections, and check npm namespace
 availability and token permission for both packages. Docker is unavailable locally;
-its existing Rust 1.80 builder needs a dependency/MSRV check before deployment.
+the builder now uses Rust 1.98.1, matching local validation and satisfying the
+locked dependencies (which require up to Rust 1.88). A container build is still
+required before deployment.
 Native iOS/Android builds, installed PWA upgrade, real provider chat/model refresh,
 and a running OpenGuru instance have not been exercised locally.
 
 Publish native assets/checksums first, then nio-de npm, then the noide-server
 compatibility package. Deploy the web build only after backend installation URLs
 are working. A v* tag triggers the backend release workflow; do not tag until
-these gates pass. No package release, merge, or app deployment is part of the
-local validation.
+these gates pass. Local validation does not itself publish packages, merge code or deploy the app.
+GitHub repositories have been renamed/transferred to the canonical names.
+Push, CI, merge and release follow local validation under the user's instruction.
 
 ## Baseline and rollback
 

@@ -1,7 +1,7 @@
 # ==============================================================================
 # Stage 1: Build the Rust binary
 # ==============================================================================
-FROM rust:1.80-slim-bookworm AS builder
+FROM rust:1.98.1-slim-bookworm AS builder
 
 WORKDIR /usr/src/nio-de
 
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY . .
 
 # Build release binary for nio-de
-RUN cargo build --release --bin nio-de --bin noide-server
+RUN cargo build --release --locked --bin nio-de --bin noide-server
 
 # ==============================================================================
 # Stage 2: Runtime image

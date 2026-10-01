@@ -30,6 +30,9 @@ jobs:
             target: windows-x86_64
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build (release)
@@ -107,7 +110,7 @@ jobs:
         working-directory: dist
         run: |
           test -f SHA256SUMS
-          for BIN in nio-de port-forward code-vault http-request canvas-lab file-manager; do
+          for BIN in nio-de noide-server port-forward code-vault http-request canvas-lab file-manager; do
             for t in linux-x86_64 linux-aarch64 darwin-x86_64 darwin-aarch64; do
               test -f "$BIN-$t" || { echo "missing $BIN-$t" >&2; exit 1; }
             done
