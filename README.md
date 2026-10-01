@@ -2,11 +2,11 @@
 
 The self-hosted backend for **NoIDE** — a browser/mobile code editor and
 terminal. It is a single native binary that serves PTY terminals, file
-operations, git, and AI coding agents (kilo/opencode) over one WebSocket
+operations, git, and AI coding agents (nio/kilo/opencode) over one WebSocket
 connection.
 
 The NoIDE app never runs on the same machine as this server: you point it at a
-`ws://` or `wss://` URL, enter a pairing code, and everything (file tree,
+`ws://` or `wss://` URL, enter a pairing code or token, and everything (file tree,
 editor, terminal, git, chat) runs on the host where `noide-server` runs.
 
 This repo also includes companion binaries:
@@ -19,6 +19,7 @@ This repo also includes companion binaries:
 **Contents**
 
 - [Install](#install)
+  - [1-Click Deploy to Railway](#-1-click-deploy-to-railway)
   - [Quickstart with npx (Zero-install)](#quickstart-with-npx-zero-install)
   - [Install script (curl)](#recommended-install-script)
 - [Run](#run)
@@ -45,6 +46,17 @@ Supported platforms:
 | Linux | x86_64, aarch64 | aarch64 targets Raspberry Pi / ARM servers |
 | macOS | x86_64 (Intel), aarch64 (Apple Silicon) | see [macOS note](#macos-note) |
 | Windows | x86_64 | see [Windows note](#windows-note) |
+
+### ☁️ 1-Click Deploy to Railway
+
+Deploy your personal NoIDE cloud development server in one click:
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/new?template=https%3A%2F%2Fgithub.com%2Fnio-labs%2Fnoide-server)
+
+- **Persistent Volume:** Automatically mounts persistent storage at `/workspace` so code and git repos survive redeploys.
+- **Pre-bundled AI Agents:** Ready out of the box with `nio` (`nio-ai`), `kilo` (`@kilocode/cli`), and `opencode` (`opencode-ai`).
+- **Free Automatic SSL:** Connect your NoIDE client directly via `wss://<your-project>.up.railway.app/?token=<your-token>`.
+- **Security:** Set `NOIDE_TOKEN` as your connection password during deployment.
 
 ### Quickstart with npx (Zero-install)
 

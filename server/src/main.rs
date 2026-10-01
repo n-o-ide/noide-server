@@ -17,7 +17,9 @@ fn detect_lan_ip() -> Option<String> {
 }
 
 fn main() {
-    let addr = std::env::var("NOTERM_WS_ADDR").unwrap_or_else(|_| "0.0.0.0:1421".to_string());
+    let mut addr = std::env::var("NOTERM_WS_ADDR")
+        .or_else(|_| std::env::var("PORT").map(|p| format!("0.0.0.0:{p}")))
+        .unwrap_or_else(|_| "0.0.0.0:1421".to_string());
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
@@ -35,13 +37,16 @@ fn main() {
                 "    noide-server [OPTIONS]\n\n",
                 "OPTIONS:\n",
                 "    --token <value>    Require this fixed token (or NOIDE_TOKEN env)\n",
+                "    --port, -p <port>  Port to bind to (or PORT / NOTERM_WS_ADDR env)\n",
                 "    --no-auth          Accept unauthenticated connections (dev only)\n",
                 "    --no-cloudflare    Disable automatic Cloudflare tunnel\n",
                 "    --version, -V      Print version and exit\n",
                 "    --help, -h         Print this help\n\n",
                 "ENVIRONMENT:\n",
                 "    NOTERM_WS_ADDR      Bind address and port (default 0.0.0.0:1421)\n",
+                "    PORT                Port to bind to (default 1421, auto-detected on Railway)\n",
                 "    NOIDE_TOKEN         Fixed token (same as --token)\n",
+                "    NOIDE_NO_CLOUDFLARE Disable Cloudflare tunnel (auto-disabled on Railway)\n",
                 "    NOIDE_PTY_KEEP_ALIVE  Seconds an unattached terminal session is kept\n",
                 "                          before reaping (default 1800)\n",
             )
@@ -59,7 +64,15 @@ fn main() {
         .ok()
         .filter(|t| !t.trim().is_empty());
     let mut no_auth = false;
-    let mut no_cloudflare = false;
+
+    // Detect cloud platforms (Railway, Render, etc.) or explicit env var
+    let is_cloud_env = std::env::var("RAILWAY_ENVIRONMENT").is_ok()
+        || std::env::var("RAILWAY_PROJECT_ID").is_ok()
+        || std::env::var("NOIDE_NO_CLOUDFLARE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+    let mut no_cloudflare = is_cloud_env;
+
     {
         let args: Vec<String> = std::env::args().skip(1).collect();
         let mut i = 0;
@@ -74,6 +87,13 @@ fn main() {
                         continue;
                     }
                 }
+                "--port" | "-p" => {
+                    if let Some(v) = args.get(i + 1) {
+                        addr = format!("0.0.0.0:{v}");
+                        i += 2;
+                        continue;
+                    }
+                }
                 "--no-auth" => no_auth = true,
                 "--no-cloudflare" => no_cloudflare = true,
                 _ => {}
@@ -82,6 +102,9 @@ fn main() {
                 if !v.trim().is_empty() {
                     token = Some(v.to_string());
                 }
+            }
+            if let Some(v) = args[i].strip_prefix("--port=") {
+                addr = format!("0.0.0.0:{v}");
             }
             i += 1;
         }
