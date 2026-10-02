@@ -32,6 +32,7 @@ This repo also includes companion binaries:
 
 - [Install](#install)
   - [1-Click Deploy to Railway](#-1-click-deploy-to-railway)
+  - [CodeSandbox VM Sandbox](#codesandbox-vm-sandbox)
   - [Quickstart with npx (Zero-install)](#quickstart-with-npx-zero-install)
   - [Install script (curl)](#recommended-install-script)
 - [Run](#run)
@@ -69,6 +70,60 @@ Deploy your personal NioDE cloud development server in one click:
 - **Nio AI chat:** Ready to use with the `nio` CLI (`@nio-labs/nio-ai`).
 - **Free Automatic SSL:** Connect your NioDE client directly via `wss://<your-project>.up.railway.app/?token=<your-token>`.
 - **Security:** Set `NIO_DE_TOKEN` as your connection password during deployment.
+
+### CodeSandbox VM Sandbox
+
+NioDE can run in a **CodeSandbox VM Sandbox (formerly Devbox)** with Node.js
+and git installed. Browser Sandboxes cannot run the native server or PTY
+terminals.
+
+CodeSandbox's [repository deprecation notice](https://github.com/codesandbox/docs/blob/main/packages/projects-docs/pages/learn/repositories/overview.mdx)
+says new GitHub imports stopped on April 1, 2026 and repository support ended
+on July 1, 2026. For a one-click launch, use a published **custom VM Sandbox
+template**, rather than a GitHub repository import link.
+
+To set up a VM Sandbox:
+
+1. Create a Node.js VM Sandbox from [CodeSandbox's Create dialog](https://codesandbox.io/d).
+2. In its terminal, start NioDE:
+   ```bash
+   NIO_DE_WS_ADDR=0.0.0.0:1421 npx -y @nio-labs/nio-de --no-cloudflare
+   ```
+3. Copy the preview URL for port **1421** and replace `https://` with `wss://`
+   (for example, `wss://<sandbox-id>-1421.csb.app`). Ensure the preview is
+   accessible from outside the CodeSandbox editor.
+4. In the NioDE app, enter that **Server URL** and the **Pairing Code** printed
+   in the terminal. Restarting NioDE creates a fresh pairing code.
+
+For automatic startup, add this `.codesandbox/tasks.json` to the VM Sandbox:
+
+```json
+{
+  "$schema": "https://codesandbox.io/schemas/tasks.json",
+  "setupTasks": [],
+  "tasks": {
+    "nio-de": {
+      "name": "NioDE server",
+      "command": "NIO_DE_WS_ADDR=0.0.0.0:1421 npx -y @nio-labs/nio-de --no-cloudflare",
+      "runAtStart": true,
+      "preview": { "port": 1421 }
+    }
+  }
+}
+```
+
+To offer a one-click button, test this setup in the VM Sandbox, stop the server
+before saving the template so forks generate their own pairing codes, then
+publish it as a public [custom template](https://github.com/codesandbox/docs/blob/main/packages/projects-docs/pages/learn/vm-sandboxes/templates.mdx).
+Use its actual share/fork URL for an **Open in CodeSandbox** badge. A template
+URL is required before this README can include a working button. The template
+is maintained separately from this GitHub repository; `sync-server.mjs --all`
+does not update it.
+
+VM availability and usage limits depend on your CodeSandbox account. This is
+a development environment; keep your work committed or backed up and restart
+the server if the VM resumes without it. Nio AI chat additionally requires the
+`nio` CLI on the VM.
 
 ### Quickstart with npx (Zero-install)
 
