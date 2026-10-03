@@ -1,0 +1,20 @@
+{
+  "name": "NioDE server",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "forwardPorts": [
+    1421
+  ],
+  "portsAttributes": {
+    "1421": {
+      "label": "NioDE WebSocket server",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    }
+  },
+  "containerEnv": {
+    "NIO_DE_WS_ADDR": "0.0.0.0:1421",
+    "NIO_DE_NO_CLOUDFLARE": "true"
+  },
+  "postCreateCommand": "npm install -g @nio-labs/nio-de @nio-labs/nio-ai",
+  "postStartCommand": "bash .devcontainer/start-server.sh"
+}

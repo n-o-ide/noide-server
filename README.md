@@ -32,7 +32,9 @@ This repo also includes companion binaries:
 
 - [Install](#install)
   - [1-Click Deploy to Railway](#-1-click-deploy-to-railway)
-  - [CodeSandbox VM Sandbox](#codesandbox-vm-sandbox)
+  - [Deploy to Fly.io](#deploy-to-flyio)
+  - [Deploy to Koyeb](#deploy-to-koyeb)
+  - [1-Click GitHub Codespaces](#1-click-github-codespaces)
   - [Quickstart with npx (Zero-install)](#quickstart-with-npx-zero-install)
   - [Install script (curl)](#recommended-install-script)
 - [Run](#run)
@@ -66,64 +68,120 @@ Deploy your personal NioDE cloud development server in one click:
 
 [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/new?template=https%3A%2F%2Fgithub.com%2Fnio-labs%2Fnio-de)
 
-- **Persistent Volume:** Automatically mounts persistent storage at `/workspace` so code and git repos survive redeploys.
+- **Persistent storage:** Attach a Railway volume at `/workspace` so code and git repos survive redeploys; the Dockerfile and `railway.json` do not create a volume automatically.
 - **Nio AI chat:** Ready to use with the `nio` CLI (`@nio-labs/nio-ai`).
 - **Free Automatic SSL:** Connect your NioDE client directly via `wss://<your-project>.up.railway.app/?token=<your-token>`.
 - **Security:** Set `NIO_DE_TOKEN` as your connection password during deployment.
 
-### CodeSandbox VM Sandbox
+### Deploy to Fly.io
 
-NioDE can run in a **CodeSandbox VM Sandbox (formerly Devbox)** with Node.js
-and git installed. Browser Sandboxes cannot run the native server or PTY
-terminals.
+Fly.io can run the server using this repository's Dockerfile. Install the
+[Fly CLI](https://fly.io/docs/flyctl/install/), sign in with `fly auth login`,
+and run these commands from your `nio-de` checkout:
 
-CodeSandbox's [repository deprecation notice](https://github.com/codesandbox/docs/blob/main/packages/projects-docs/pages/learn/repositories/overview.mdx)
-says new GitHub imports stopped on April 1, 2026 and repository support ended
-on July 1, 2026. For a one-click launch, use a published **custom VM Sandbox
-template**, rather than a GitHub repository import link.
-
-To set up a VM Sandbox:
-
-1. Create a Node.js VM Sandbox from [CodeSandbox's Create dialog](https://codesandbox.io/d).
-2. In its terminal, start NioDE:
-   ```bash
-   NIO_DE_WS_ADDR=0.0.0.0:1421 npx -y @nio-labs/nio-de --no-cloudflare
-   ```
-3. Copy the preview URL for port **1421** and replace `https://` with `wss://`
-   (for example, `wss://<sandbox-id>-1421.csb.app`). Ensure the preview is
-   accessible from outside the CodeSandbox editor.
-4. In the NioDE app, enter that **Server URL** and the **Pairing Code** printed
-   in the terminal. Restarting NioDE creates a fresh pairing code.
-
-For automatic startup, add this `.codesandbox/tasks.json` to the VM Sandbox:
-
-```json
-{
-  "$schema": "https://codesandbox.io/schemas/tasks.json",
-  "setupTasks": [],
-  "tasks": {
-    "nio-de": {
-      "name": "NioDE server",
-      "command": "NIO_DE_WS_ADDR=0.0.0.0:1421 npx -y @nio-labs/nio-de --no-cloudflare",
-      "runAtStart": true,
-      "preview": { "port": 1421 }
-    }
-  }
-}
+```bash
+fly launch --no-deploy
 ```
 
-To offer a one-click button, test this setup in the VM Sandbox, stop the server
-before saving the template so forks generate their own pairing codes, then
-publish it as a public [custom template](https://github.com/codesandbox/docs/blob/main/packages/projects-docs/pages/learn/vm-sandboxes/templates.mdx).
-Use its actual share/fork URL for an **Open in CodeSandbox** badge. A template
-URL is required before this README can include a working button. The template
-is maintained separately from this GitHub repository; `sync-server.mjs --all`
-does not update it.
+Choose a unique app name and a region. Keep the generated `app` and
+`primary_region` values in `fly.toml`, and configure the following sections
+(replace any generated service or health-check sections):
 
-VM availability and usage limits depend on your CodeSandbox account. This is
-a development environment; keep your work committed or backed up and restart
-the server if the VM resumes without it. Nio AI chat additionally requires the
-`nio` CLI on the VM.
+```toml
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NIO_DE_WS_ADDR = "0.0.0.0:1421"
+  NIO_DE_NO_CLOUDFLARE = "true"
+
+[http_service]
+  internal_port = 1421
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[mounts]]
+  source = "nio_workspace"
+  destination = "/workspace"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+```
+
+Then create storage in the same region as the app, set a private connection
+token (generate one with `openssl rand -hex 24` and save it for pairing),
+and deploy one Machine:
+
+```bash
+fly volumes create nio_workspace --region <your-region> --size 1
+fly secrets set NIO_DE_TOKEN="<your-long-random-token>"
+fly deploy --ha=false
+```
+
+Enter `wss://<your-app-name>.fly.dev` and your token in the NioDE app.
+Keep one Machine for this personal server so terminals and workspace files
+stay on the same host. Increase memory if your tools need more. Disabling
+autostop keeps the server running and incurs usage charges; redeploys and
+Machine restarts still end running terminal processes.
+
+Files under `/workspace` persist on the volume; settings elsewhere in the
+container do not. Keep backups: [Fly volumes](https://fly.io/docs/volumes/overview/)
+are local to a Machine and are not automatically replicated.
+See the [Fly configuration reference](https://fly.io/docs/reference/configuration/)
+for service and storage options.
+
+### Deploy to Koyeb
+
+[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=git&repository=github.com%2Fnio-labs%2Fnio-de&branch=main&name=nio-de&builder=dockerfile&dockerfile=Dockerfile&instance_type=free&ports=1421%3Bhttp%3B%2F&env%5BNIO_DE_WS_ADDR%5D=0.0.0.0%3A1421&env%5BNIO_DE_NO_CLOUDFLARE%5D=true)
+
+The button preselects this repository's Dockerfile, the **Free** instance,
+and HTTP port **1421** at path `/`. Before deploying, set `NIO_DE_TOKEN` to
+a value you generate privately with `openssl rand -hex 24` and save for
+pairing. Do not put your token in a deploy-button URL.
+
+After deployment, enter `wss://<your-service-domain>.koyeb.app` and your token
+in the NioDE app. Keep the default TCP health check on port 1421; the server
+accepts WebSocket upgrades and does not expose an HTTP health endpoint.
+
+Koyeb's [free instance](https://www.koyeb.com/docs/reference/instances) has
+512 MB RAM, 0.1 vCPU, and 2 GB temporary storage, with one free instance per
+organization. It sleeps after one hour without traffic and cannot attach a
+persistent volume. Treat this as a disposable demo: commit or export your
+work before stopping or redeploying. Nio chat and development tools share
+these limited resources.
+
+### 1-Click GitHub Codespaces
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/nio-labs/nio-de?quickstart=1)
+
+Click the button and confirm creation of a Codespace. The included
+`.devcontainer` configuration installs the released NioDE server and Nio chat
+CLI, then starts the server automatically on port **1421** each time the
+container starts. It runs from the repository workspace; this launches the
+published release rather than building the checked-out Rust sources.
+
+1. Read the latest pairing code in the Codespace terminal:
+   ```bash
+   tail -n 80 /tmp/nio-de-codespaces/server.log
+   ```
+2. In the **Ports** panel, set port **1421** to **Public** so the external NioDE
+   app can connect without GitHub's browser login. Pairing remains required.
+3. Copy the forwarded HTTPS address, replace `https://` with `wss://`, and
+   enter that URL and pairing code in the NioDE app.
+
+If you configure a `NIO_DE_TOKEN` Codespaces secret, use that token instead
+of a pairing code. Otherwise each server restart creates a fresh code.
+
+[GitHub Codespaces](https://docs.github.com/en/billing/concepts/product-billing/github-codespaces)
+includes a monthly compute and storage allowance for personal accounts;
+it is not an always-on free host. Idle Codespaces stop, ending terminals.
+Workspace files survive a stop/start, but deleting the Codespace deletes its
+workspace, so keep your work backed up or pushed to Git.
+See [port forwarding](https://docs.github.com/en/codespaces/developing-in-a-codespace/forwarding-ports-in-your-codespace)
+for visibility and connection details.
 
 ### Quickstart with npx (Zero-install)
 
@@ -212,27 +270,10 @@ bash install.sh --all
 
 ### Recommended: GitHub Codespaces
 
-For the best experience, **run `nio-de` in a GitHub Codespace** — it's
-free within your monthly quota, gives Nio a full Linux environment
-(glibc and Node.js for the Nio CLI), and its port forwarding hands you
-a `wss://` URL automatically:
-
-1. Create a Codespace (any repo works — even a blank one) and open its terminal.
-2. Install and start the server:
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/nio-labs/nio-de/main/install.sh | bash
-   nio-de
-   ```
-3. Codespaces will suggest forwarding port **1421**. Open the forwarded port
-   and copy the `wss://…app.github.dev` URL.
-4. In the NioDE app: set **Server URL** to that `wss://` URL and enter the
-   **Pairing Code** printed by the server.
-
-Notes:
-
-- Codespace machines pause when idle or closed — restart the server after the
-  machine wakes (`nio-de` again; it prints a fresh pairing code).
-- Re-run the install command any time to upgrade to the latest release.
+Use the [1-click Codespaces setup](#1-click-github-codespaces) above to install
+and start the server automatically. To use an existing Codespace instead,
+run `npx @nio-labs/nio-de --no-cloudflare`, forward port **1421** publicly,
+and pair with its `wss://` address and the code printed in the terminal.
 
 ### Termux (Android)
 

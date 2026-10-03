@@ -1,8 +1,13 @@
-## NioDE Server 0.5.2
+## NioDE Server 0.5.3
 
-NioAI is now installed from `@nio-labs/nio-ai`. The `nio` command is unchanged.
-This updates the npm launcher, shell installer, Docker image, and in-app agent
-installer so they no longer depend on the removed unscoped `nio-ai` package.
+Deploy NioDE with new Koyeb and GitHub Codespaces launch buttons, plus a
+Fly.io deployment walkthrough. Codespaces installs the released server and
+Nio chat CLI automatically and starts an authenticated server on port 1421.
+The startup hook prevents duplicate server processes and protects pairing logs.
+
+The README now documents Koyeb's free-instance limits, Codespaces quotas,
+and Railway's explicit persistent-volume setup. CodeSandbox deployment
+instructions have been removed.
 
 ### Install
 
