@@ -31,12 +31,12 @@ This repo also includes companion binaries:
 **Contents**
 
 - [Install](#install)
+  - [Quickstart with npx (Zero-install)](#quickstart-with-npx-zero-install)
+  - [Install script (curl)](#recommended-install-script-curl)
   - [1-Click Deploy to Railway](#-1-click-deploy-to-railway)
   - [Deploy to Fly.io](#deploy-to-flyio)
   - [Deploy to Koyeb](#deploy-to-koyeb)
   - [1-Click GitHub Codespaces](#1-click-github-codespaces)
-  - [Quickstart with npx (Zero-install)](#quickstart-with-npx-zero-install)
-  - [Install script (curl)](#recommended-install-script)
 - [Run](#run)
 - [Port Forward](#port-forward)
 - [Code Vault](#code-vault)
@@ -54,6 +54,81 @@ This repo also includes companion binaries:
 
 ## Install
 
+### Quickstart with npx (Zero-install)
+
+If you have Node.js available, run `nio-de` anywhere with a single command without downloading or setting up anything manually:
+
+```bash
+npx @nio-labs/nio-de
+```
+
+Pass any flags directly:
+
+```bash
+# Set a persistent secret token
+npx @nio-labs/nio-de --token my-secret-token
+
+# Disable automatic Cloudflare tunnel
+npx @nio-labs/nio-de --no-cloudflare
+```
+
+To install it globally via npm:
+
+```bash
+npm install -g @nio-labs/nio-de
+nio-de
+```
+
+Under the hood, `npx @nio-labs/nio-de` detects your operating system and CPU architecture (Linux x64/ARM64, macOS Apple Silicon/Intel, Windows x64), verifies the binary's SHA-256 checksum, caches it in `~/.noide/bin`, and starts the WebSocket server in your current directory.
+
+### Recommended: install script (curl)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nio-labs/nio-de/main/install.sh | bash
+```
+
+What it does: detects your OS/arch, downloads the matching binary from the
+latest stable release, verifies its SHA-256 checksum, and installs it to
+`~/.local/bin` (falling back to `/usr/local/bin`). Pass `--all` to install every
+companion binaries too (port-forward, code-vault, http-request, canvas-lab, file-manager). Re-running the
+same command upgrades you to the newest version.
+
+Prefer inspecting scripts before piping them into a shell? That's reasonable:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nio-labs/nio-de/main/install.sh -o install.sh
+less install.sh   # read it
+bash install.sh
+```
+
+Other install options:
+
+```bash
+# Pin a specific version
+VERSION=0.4.2 bash install.sh
+
+# Dry run: print what would happen without installing
+bash install.sh --dry-run
+
+# Install port-forward only
+bash install.sh --port-forward
+
+# Install code-vault only
+bash install.sh --code-vault
+
+# Install http-request only
+bash install.sh --http-request
+
+# Install Canvas Lab only
+bash install.sh --canvas-lab
+
+# Install file-manager only
+bash install.sh --file-manager
+
+# Install all binaries
+bash install.sh --all
+```
+
 Supported platforms:
 
 | OS | Architecture | Notes |
@@ -62,6 +137,68 @@ Supported platforms:
 | macOS | x86_64 (Intel), aarch64 (Apple Silicon) | see [macOS note](#macos-note) |
 | Windows | x86_64 | see [Windows note](#windows-note) |
 
+### Requirements
+
+- **No Rust needed.** Prebuilt binaries are downloaded automatically by `npx @nio-labs/nio-de` and `install.sh`. A Rust toolchain is only required to [build from source](#build-from-source).
+- **Node.js:** Required for `npx @nio-labs/nio-de` and the Nio chat CLI. The standalone server binary installed via `install.sh` has zero runtime dependencies.
+- **`git` is required** for the app's Source Control features — the server
+  shells out to the `git` binary on the host. Install it if your system
+  doesn't already have it.
+- Terminal tabs run your host's login shell — zsh/bash on Linux/macOS and
+  PowerShell on Windows.
+
+### Termux (Android)
+
+`nio-de` is a native binary and runs on aarch64 devices — Termux works.
+For better performance with Nio chat, run it inside an
+[AndroNix](https://andronix.app) proot (Ubuntu CLI only) instead (a full Linux distro with a
+real glibc + Node.js toolchain for the Nio CLI); avoid third-party "Proot Distro" installers,
+which are slower and less reliable.
+
+### Manual install
+
+Download `nio-de-<os>-<arch>` (`nio-de-windows-x86_64.exe` on
+Windows) from the [releases](https://github.com/nio-labs/nio-de/releases)
+page and verify it against the published `SHA256SUMS`:
+
+```bash
+curl -fLO https://github.com/nio-labs/nio-de/releases/latest/download/nio-de-linux-x86_64
+curl -fLO https://github.com/nio-labs/nio-de/releases/latest/download/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing   # or: shasum -a 256 -c
+chmod +x nio-de-linux-x86_64
+sudo mv nio-de-linux-x86_64 /usr/local/bin/nio-de
+nio-de --version
+```
+
+<a name="macos-note"></a>
+**macOS note:** binaries downloaded from the internet are quarantined by
+Gatekeeper. If you see "cannot be opened because the developer cannot be
+verified", remove the quarantine attribute once:
+
+```bash
+xattr -d com.apple.quarantine "$(command -v nio-de)"
+xattr -d com.apple.quarantine "$(command -v port-forward)"
+xattr -d com.apple.quarantine "$(command -v code-vault)"
+xattr -d com.apple.quarantine "$(command -v http-request)"
+xattr -d com.apple.quarantine "$(command -v file-manager)"
+```
+
+<a name="windows-note"></a>
+**Windows note:** the release binary is `nio-de-windows-x86_64.exe`.
+Binaries are unsigned, so SmartScreen may warn "Windows protected your PC" —
+click **More info → Run anyway**, or launch it from PowerShell and verify it
+against the published `SHA256SUMS`:
+
+```powershell
+curl.exe -fLO https://github.com/nio-labs/nio-de/releases/latest/download/nio-de-windows-x86_64.exe
+curl.exe -fLO https://github.com/nio-labs/nio-de/releases/latest/download/SHA256SUMS
+certutil -hashfile nio-de-windows-x86_64.exe SHA256   # compare with SHA256SUMS
+.\nio-de-windows-x86_64.exe --version
+```
+
+Terminal tabs default to PowerShell on Windows. **git** is required for
+Source Control — install [Git for Windows](https://git-scm.com/download/win)
+if it isn't already on your PATH.
 ### ☁️ 1-Click Deploy to Railway
 
 Deploy your personal NioDE cloud development server in one click:
@@ -183,150 +320,9 @@ workspace, so keep your work backed up or pushed to Git.
 See [port forwarding](https://docs.github.com/en/codespaces/developing-in-a-codespace/forwarding-ports-in-your-codespace)
 for visibility and connection details.
 
-### Quickstart with npx (Zero-install)
-
-If you have Node.js available, run `nio-de` anywhere with a single command without downloading or setting up anything manually:
-
-```bash
-npx @nio-labs/nio-de
-```
-
-Pass any flags directly:
-
-```bash
-# Set a persistent secret token
-npx @nio-labs/nio-de --token my-secret-token
-
-# Disable automatic Cloudflare tunnel
-npx @nio-labs/nio-de --no-cloudflare
-```
-
-To install it globally via npm:
-
-```bash
-npm install -g @nio-labs/nio-de
-nio-de
-```
-
-Under the hood, `npx @nio-labs/nio-de` detects your operating system and CPU architecture (Linux x64/ARM64, macOS Apple Silicon/Intel, Windows x64), verifies the binary's SHA-256 checksum, caches it in `~/.noide/bin`, and starts the WebSocket server in your current directory.
-
-### Requirements
-
-- **No Rust needed.** Prebuilt binaries are downloaded automatically by `npx @nio-labs/nio-de` and `install.sh`. A Rust toolchain is only required to [build from source](#build-from-source).
-- **Node.js:** Required for `npx @nio-labs/nio-de` and the Nio chat CLI. The standalone server binary installed via `install.sh` has zero runtime dependencies.
-- **`git` is required** for the app's Source Control features — the server
-  shells out to the `git` binary on the host. Install it if your system
-  doesn't already have it.
-- Terminal tabs run your host's login shell — zsh/bash on Linux/macOS and
-  PowerShell on Windows.
-
-### Recommended: install script (curl)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/nio-labs/nio-de/main/install.sh | bash
-```
-
-What it does: detects your OS/arch, downloads the matching binary from the
-latest stable release, verifies its SHA-256 checksum, and installs it to
-`~/.local/bin` (falling back to `/usr/local/bin`). Pass `--all` to install every
-companion binaries too (port-forward, code-vault, http-request, canvas-lab, file-manager). Re-running the
-same command upgrades you to the newest version.
-
-Prefer inspecting scripts before piping them into a shell? That's reasonable:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/nio-labs/nio-de/main/install.sh -o install.sh
-less install.sh   # read it
-bash install.sh
-```
-
-Other install options:
-
-```bash
-# Pin a specific version
-VERSION=0.4.2 bash install.sh
-
-# Dry run: print what would happen without installing
-bash install.sh --dry-run
-
-# Install port-forward only
-bash install.sh --port-forward
-
-# Install code-vault only
-bash install.sh --code-vault
-
-# Install http-request only
-bash install.sh --http-request
-
-# Install Canvas Lab only
-bash install.sh --canvas-lab
-
-# Install file-manager only
-bash install.sh --file-manager
-
-# Install all binaries
-bash install.sh --all
-```
-
-### Recommended: GitHub Codespaces
-
-Use the [1-click Codespaces setup](#1-click-github-codespaces) above to install
-and start the server automatically. To use an existing Codespace instead,
-run `npx @nio-labs/nio-de --no-cloudflare`, forward port **1421** publicly,
-and pair with its `wss://` address and the code printed in the terminal.
-
-### Termux (Android)
-
-`nio-de` is a native binary and runs on aarch64 devices — Termux works.
-For better performance with Nio chat, run it inside an
-[AndroNix](https://andronix.app) proot (Ubuntu CLI only) instead (a full Linux distro with a
-real glibc + Node.js toolchain for the Nio CLI); avoid third-party "Proot Distro" installers,
-which are slower and less reliable.
-
-### Manual install
-
-Download `nio-de-<os>-<arch>` (`nio-de-windows-x86_64.exe` on
-Windows) from the [releases](https://github.com/nio-labs/nio-de/releases)
-page and verify it against the published `SHA256SUMS`:
-
-```bash
-curl -fLO https://github.com/nio-labs/nio-de/releases/latest/download/nio-de-linux-x86_64
-curl -fLO https://github.com/nio-labs/nio-de/releases/latest/download/SHA256SUMS
-sha256sum -c SHA256SUMS --ignore-missing   # or: shasum -a 256 -c
-chmod +x nio-de-linux-x86_64
-sudo mv nio-de-linux-x86_64 /usr/local/bin/nio-de
-nio-de --version
-```
-
-<a name="macos-note"></a>
-**macOS note:** binaries downloaded from the internet are quarantined by
-Gatekeeper. If you see "cannot be opened because the developer cannot be
-verified", remove the quarantine attribute once:
-
-```bash
-xattr -d com.apple.quarantine "$(command -v nio-de)"
-xattr -d com.apple.quarantine "$(command -v port-forward)"
-xattr -d com.apple.quarantine "$(command -v code-vault)"
-xattr -d com.apple.quarantine "$(command -v http-request)"
-xattr -d com.apple.quarantine "$(command -v file-manager)"
-```
-
-<a name="windows-note"></a>
-**Windows note:** the release binary is `nio-de-windows-x86_64.exe`.
-Binaries are unsigned, so SmartScreen may warn "Windows protected your PC" —
-click **More info → Run anyway**, or launch it from PowerShell and verify it
-against the published `SHA256SUMS`:
-
-```powershell
-curl.exe -fLO https://github.com/nio-labs/nio-de/releases/latest/download/nio-de-windows-x86_64.exe
-curl.exe -fLO https://github.com/nio-labs/nio-de/releases/latest/download/SHA256SUMS
-certutil -hashfile nio-de-windows-x86_64.exe SHA256   # compare with SHA256SUMS
-.\nio-de-windows-x86_64.exe --version
-```
-
-Terminal tabs default to PowerShell on Windows. **git** is required for
-Source Control — install [Git for Windows](https://git-scm.com/download/win)
-if it isn't already on your PATH.
+To use an existing Codespace instead, run `npx @nio-labs/nio-de --no-cloudflare`,
+forward port **1421** publicly, and pair with its `wss://` address and the
+code printed in the terminal.
 
 ---
 
